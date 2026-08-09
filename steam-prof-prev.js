@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Steam Profile Previewer 1.2
+// @name         Steam Profile Previewer 1.3
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  Preview Steam profile themes with your own background, avatar frame and avatar
 // @author       You
 // @match        https://steamcommunity.com/*
@@ -1149,6 +1149,8 @@
                         background:#0e1620; overflow:hidden; display:flex; align-items:center; justify-content:center;"></div>
                     <div style="flex:1; min-width:0; font-size:11px;">${slot.label}</div>
                     <span data-slotstate="${slot.id}" style="flex:none; font-size:10px; color:#7a8b99;">none</span>
+                    <span data-slotgrab="${slot.id}" title="Grab just this page's ${slot.label.toLowerCase()} and apply it"
+                        style="flex:none; cursor:pointer; color:#66c0f4; padding:0 3px; font-size:12px;">&#8681;</span>
                     <span data-slotclear="${slot.id}" title="Clear this slot"
                         style="flex:none; cursor:pointer; color:#7a8b99; padding:0 3px; font-size:14px;">&times;</span>
                 </div>
@@ -1396,11 +1398,30 @@
             const body = panel.querySelector(`[data-slotbody="${slot.id}"]`);
             const caret = panel.querySelector(`[data-slotcaret="${slot.id}"]`);
             head.addEventListener('click', (e) => {
-                if (e.target.dataset && e.target.dataset.slotclear) return;
+                if (e.target.dataset && (e.target.dataset.slotclear || e.target.dataset.slotgrab)) return;
                 const open = body.style.display !== 'none';
                 body.style.display = open ? 'none' : '';
                 caret.innerHTML = open ? '&#9656;' : '&#9662;';
             });
+            // Grabs one slot and applies it straight away. Filling the fields
+            // alone wouldn't survive the next page load — and moving between
+            // pages is the whole point of a per-slot grab, since applied state
+            // persists and accumulates while typed fields don't.
+            panel.querySelector(`[data-slotgrab="${slot.id}"]`).addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const snap = pageSnapshot[slot.id];
+                if (!snap || !snap.value) {
+                    setStatus('This page has no ' + slot.label.toLowerCase() + ' of its own to grab.', true);
+                    return;
+                }
+                writeSlotFields(slot.id, snap.value);
+                if (applySlot(slot.id, snap.value)) {
+                    await store.set(STATE_KEY, JSON.stringify(activeSet()));
+                    setStatus('Grabbed this page\u2019s ' + slot.label.toLowerCase() + '.', false);
+                }
+                refreshSlotRow(slot.id);
+            });
+
             panel.querySelector(`[data-slotclear="${slot.id}"]`).addEventListener('click', async (e) => {
                 e.stopPropagation();
                 clearSlot(slot.id);
