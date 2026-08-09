@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Steam Profile Previewer 1.0
+// @name         Steam Profile Previewer 1.2
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.2
 // @description  Preview Steam profile themes with your own background, avatar frame and avatar
 // @author       You
 // @match        https://steamcommunity.com/*
@@ -641,7 +641,266 @@
         },
     };
 
-    const SLOTS = [backgroundSlot];
+    // ---------------- picture/img swapping ----------------
+    //
+    // Steam serves avatars and frames as <picture> with two <source>
+    // elements and an <img>. A matching <source> beats the <img>, so
+    // setting img.src alone changes nothing visible — every srcset has to
+    // be overridden too. The avatar's <img> carries only srcset and no
+    // src at all, so a src-only swap would fail twice over.
+
+    function imgOf(el) {
+        if (!el) return null;
+        return el.tagName === 'IMG' ? el : el.querySelector('img');
+    }
+
+    function sourcesOf(el) {
+        if (!el || el.tagName === 'IMG') return [];
+        return Array.from(el.querySelectorAll('source'));
+    }
+
+    function captureImageSources(el) {
+        const img = imgOf(el);
+        const sources = sourcesOf(el);
+        return {
+            el, img, sources,
+            imgSrc: img ? img.getAttribute('src') : null,
+            imgSrcset: img ? img.getAttribute('srcset') : null,
+            sourceSrcsets: sources.map(source => source.getAttribute('srcset')),
+        };
+    }
+
+    function setImageSources(el, url) {
+        for (const source of sourcesOf(el)) source.setAttribute('srcset', url);
+        const img = imgOf(el);
+        if (img) {
+            img.setAttribute('src', url);
+            img.setAttribute('srcset', url);
+        }
+    }
+
+    function restoreImageSources(memo) {
+        if (!memo) return;
+        memo.sources.forEach((source, i) => {
+            const value = memo.sourceSrcsets[i];
+            if (value === null) source.removeAttribute('srcset');
+            else source.setAttribute('srcset', value);
+        });
+        if (memo.img) {
+            if (memo.imgSrc === null) memo.img.removeAttribute('src');
+            else memo.img.setAttribute('src', memo.imgSrc);
+            if (memo.imgSrcset === null) memo.img.removeAttribute('srcset');
+            else memo.img.setAttribute('srcset', memo.imgSrcset);
+        }
+    }
+
+    function currentImageUrl(el) {
+        const img = imgOf(el);
+        if (img) {
+            const src = img.getAttribute('src');
+            if (src) return src;
+            const srcset = img.getAttribute('srcset');
+            if (srcset) return srcset.split(',')[0].trim().split(/\s+/)[0];
+            if (img.currentSrc) return img.currentSrc;
+        }
+        const source = sourcesOf(el).find(s2 => s2.getAttribute('srcset'));
+        if (source) return source.getAttribute('srcset').split(',')[0].trim().split(/\s+/)[0];
+        return '';
+    }
+
+    // Steam serves one avatar at several sizes: name.jpg, name_medium.jpg,
+    // name_full.jpg. Strip the suffix and extension and what's left is the
+    // asset's identity — shared by every copy of it on the page, and
+    // different for every other user's avatar.
+    function identityKey(url) {
+        if (!url) return '';
+        const file = url.split('?')[0].split('#')[0].split('/').pop();
+        if (!file) return '';
+        return file.replace(/\.[a-z0-9]+$/i, '').replace(/_(full|medium|small)$/i, '');
+    }
+
+    function sameFile(a, b) {
+        if (!a || !b) return false;
+        return a.split('?')[0].split('/').pop() === b.split('?')[0].split('/').pop();
+    }
+
+    // Shared behaviour for the avatar and avatar-frame slots: both are a
+    // <picture> to be swapped in place, differing only in how they're found
+    // and whether they can be created when absent.
+    const pictureSlotBase = {
+        kinds: ['image'],
+
+        find() { return findByStrategies(this.strategies, this.id); },
+
+        snapshot() {
+            const el = this.find();
+            if (!el) return { value: null, meta: {} };
+            const url = currentImageUrl(el);
+            return { value: url ? { kind: 'image', url } : null, meta: {} };
+        },
+
+        // Every copy of this asset on the page, found by identity rather
+        // than by location: no extra selectors to break, and other people's
+        // avatars in comments and friend lists are left alone.
+        collectTargets(state) {
+            let primary = this.find();
+            if (!primary && this.create) primary = this.create(state);
+            if (!primary) return null;
+
+            const targets = [primary];
+            const key = identityKey(currentImageUrl(primary));
+            if (key) {
+                for (const img of document.querySelectorAll('img')) {
+                    if (img.closest('#pp-panel')) continue;      // our own thumbnails
+                    if (!this.accepts(img)) continue;
+                    const container = this.containerFor(img);
+                    if (!container || targets.indexOf(container) !== -1) continue;
+                    if (identityKey(currentImageUrl(container)) !== key) continue;
+                    targets.push(container);
+                }
+            }
+
+            state.targets = targets;
+            state.targetEl = primary;
+            // Captured now, while everything still shows the page's own asset.
+            state.original = targets.map(el => captureImageSources(el));
+            return targets;
+        },
+
+        ensureTargets(state) {
+            const usable = state.targets && state.targets.length
+                && state.targets.every(el => el.isConnected);
+            return usable ? state.targets : this.collectTargets(state);
+        },
+
+        apply(state, value, meta, report) {
+            const targets = this.ensureTargets(state);
+            if (!targets) return { ok: false, message: this.missingMessage };
+            for (const el of targets) setImageSources(el, value.url);
+            const el = state.targetEl;
+
+            // Report a load failure rather than leaving a broken image.
+            const probe = new Image();
+            probe.onerror = () => {
+                if (!state.active || state.active.url !== value.url) return;
+                report({ ok: false, message: this.label + ': that URL didn\u2019t load as an image.' });
+            };
+            probe.src = value.url;
+
+            const extra = targets.length - 1;
+            return {
+                ok: true,
+                message: this.label + ' applied' + (extra > 0 ? ' in ' + targets.length + ' places.' : '.'),
+            };
+        },
+
+        verify(state, value) {
+            if (!state.targetEl || !state.targetEl.isConnected) return false;
+            return sameFile(currentImageUrl(state.targetEl), value.url);
+        },
+
+        restore(state) {
+            for (const memo of (state.original || [])) restoreImageSources(memo);
+            if (state.created && state.targetEl && state.targetEl.isConnected) {
+                state.targetEl.remove();
+            }
+            state.created = false;
+            state.targets = null;
+        },
+
+        peekOut(state) {
+            if (!state.targets || !state.targets.length) return null;
+            for (const memo of (state.original || [])) restoreImageSources(memo);
+            if (state.created && state.targetEl) {
+                state.targetEl.style.setProperty('display', 'none', 'important');
+            }
+            return { swapped: true };
+        },
+
+        peekIn(state, memo) {
+            if (!memo || !state.active || !state.targets) return;
+            if (state.created && state.targetEl) state.targetEl.style.removeProperty('display');
+            for (const el of state.targets) setImageSources(el, state.active.url);
+        },
+    };
+
+    const avatarFrameSlot = Object.assign({}, pictureSlotBase, {
+        id: 'avatarFrame',
+        label: 'Avatar frame',
+        missingMessage: 'Couldn\u2019t find anywhere to put an avatar frame on this page.',
+
+        accepts(img) { return !!img.closest('.profile_avatar_frame'); },
+        containerFor(img) { return img.closest('.profile_avatar_frame'); },
+
+        strategies: [
+            {
+                name: 'header avatar .profile_avatar_frame',
+                find() { return document.querySelector('.playerAvatar.profile_header_size .profile_avatar_frame'); },
+            },
+            {
+                name: '.playerAvatarAutoSizeInner > .profile_avatar_frame',
+                find() { return document.querySelector('.playerAvatarAutoSizeInner > .profile_avatar_frame'); },
+            },
+            {
+                name: 'first .profile_avatar_frame',
+                find() { return document.querySelector('.profile_avatar_frame'); },
+            },
+        ],
+
+        // A profile with no frame equipped has no element to swap, so make
+        // one. Same class name, so Steam's own CSS positions it.
+        create(state) {
+            const host = document.querySelector('.playerAvatar.profile_header_size .playerAvatarAutoSizeInner')
+                || document.querySelector('.playerAvatarAutoSizeInner');
+            if (!host) return null;
+            const frame = document.createElement('div');
+            frame.className = 'profile_avatar_frame';
+            frame.appendChild(document.createElement('img'));
+            host.insertBefore(frame, host.firstChild);
+            state.created = true;
+            return frame;
+        },
+    });
+
+    const avatarSlot = Object.assign({}, pictureSlotBase, {
+        id: 'avatar',
+        label: 'Avatar',
+        missingMessage: 'Couldn\u2019t find the profile avatar on this page.',
+
+        accepts(img) { return !img.closest('.profile_avatar_frame'); },
+        containerFor(img) { return img.closest('picture') || img; },
+
+        // Header avatar only. Deliberately not every avatar on the page:
+        // comments and friend lists show other people, and rewriting them
+        // all multiplies the breakage surface for no benefit.
+        strategies: [
+            {
+                name: 'header .playerAvatarAutoSizeInner > picture',
+                find() { return document.querySelector('.playerAvatar.profile_header_size .playerAvatarAutoSizeInner > picture'); },
+            },
+            {
+                name: '.playerAvatarAutoSizeInner > picture',
+                find() { return document.querySelector('.playerAvatarAutoSizeInner > picture'); },
+            },
+            {
+                name: '.playerAvatarAutoSizeInner > img',
+                find() { return document.querySelector('.playerAvatarAutoSizeInner > img'); },
+            },
+            {
+                name: 'header avatar img outside the frame',
+                find() {
+                    const holder = document.querySelector('.playerAvatar.profile_header_size');
+                    if (!holder) return null;
+                    for (const img of holder.querySelectorAll('img')) {
+                        if (!img.closest('.profile_avatar_frame')) return img;
+                    }
+                    return null;
+                },
+            },
+        ],
+    });
+
+    const SLOTS = [backgroundSlot, avatarFrameSlot, avatarSlot];
     const SLOT_BY_ID = {};
     for (const slot of SLOTS) SLOT_BY_ID[slot.id] = slot;
 
@@ -651,7 +910,7 @@
 
     const slotState = {};
     for (const slot of SLOTS) {
-        slotState[slot.id] = { original: null, targetEl: null, active: null, neutralized: [], peek: null };
+        slotState[slot.id] = { original: null, targetEl: null, active: null, neutralized: [], peek: null, created: false, targets: null };
     }
 
     let pageSnapshot = {};      // slotId -> { value, meta }
@@ -741,6 +1000,8 @@
         state.original = null;
         state.targetEl = null;
         state.active = null;
+        state.created = false;
+        state.targets = null;
         if (!quiet) setStatus(slot.label + ' cleared.', false);
     }
 
@@ -822,7 +1083,7 @@
             }, 300);
         });
         observer.observe(document.body, {
-            childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'src'],
+            childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'src', 'srcset'],
         });
     }
 
@@ -834,6 +1095,8 @@
             state.original = null;
             state.targetEl = null;
             state.peek = null;
+            state.created = false;
+            state.targets = null;
         }
         peeking = false;
         snapshotTaken = false;
