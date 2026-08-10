@@ -1,14 +1,16 @@
 // ==UserScript==
-// @name         Steam Profile Previewer 1.3
+// @name         Steam Profile Previewer 1.27
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.27
 // @description  Preview Steam profile themes with your own background, avatar frame and avatar
 // @author       You
 // @match        https://steamcommunity.com/*
+// @match        https://store.steampowered.com/points/*
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_addValueChangeListener
 // @grant        GM_setClipboard
+// @run-at       document-start
 // ==/UserScript==
 
 (function () {
@@ -25,6 +27,7 @@
     // identically to 9.11, the abstraction fits.
     // =================================================================
 
+    const SCRIPT_VERSION = '1.27';
     const STATE_KEY = 'ppApplied';
     const PRESETS_KEY = 'ppPresets';
     const AUTO_KEY = 'ppAuto';
@@ -900,7 +903,287 @@
         ],
     });
 
-    const SLOTS = [backgroundSlot, avatarFrameSlot, avatarSlot];
+    // ---------------- mini profile ----------------
+    //
+    // Unlike the other slots this one has no stable element: the popup is
+    // built when you hover a name and rebuilt on every hover, so applying
+    // once is useless. A watcher repaints it each time it renders.
+    //
+    // It also shows whichever user you hovered, so the painter checks the
+    // last hovered data-miniprofile id against the profile owner's before
+    // touching anything.
+
+    let ownerMiniId = '';
+    let lastHoverMiniId = '';
+
+    // Pages can carry an empty .miniprofile_hover placeholder alongside a
+    // populated one, so take the one with actual content.
+    function miniPopup() {
+        const popups = document.querySelectorAll('.miniprofile_hover');
+        for (const popup of popups) {
+            if (popup.querySelector('.miniprofile_container')) return popup;
+        }
+        return popups[0] || null;
+    }
+
+    function nameplateValueFrom(container) {
+        if (!container) return null;
+        const video = container.querySelector('video');
+        if (video) {
+            const clip = { kind: 'video', mp4: '', webm: '', poster: video.getAttribute('poster') || '' };
+            for (const source of video.querySelectorAll('source')) {
+                const src = source.getAttribute('src') || '';
+                const type = source.getAttribute('type') || '';
+                if (/\.webm/i.test(src) || type.includes('webm')) clip.webm = clip.webm || src;
+                else if (/\.mp4/i.test(src) || type.includes('mp4')) clip.mp4 = clip.mp4 || src;
+            }
+            if (clip.mp4 || clip.webm) return clip;
+        }
+        const img = container.querySelector('img');
+        const url = img ? (img.getAttribute('src') || '') : '';
+        return url ? { kind: 'image', url } : null;
+    }
+
+    function waitFor(test, timeoutMs) {
+        return new Promise(resolve => {
+            const started = Date.now();
+            (function poll() {
+                if (test()) return resolve(true);
+                if (Date.now() - started > timeoutMs) return resolve(false);
+                setTimeout(poll, 50);
+            })();
+        });
+    }
+
+    // Ask Steam to build the popup itself, by pretending to hover the name.
+    // Hidden with a temporary stylesheet so it doesn't flash open and shut.
+    async function forceMiniProfileHover(timeoutMs) {
+        const holder = document.querySelector('.playerAvatar.profile_header_size[data-miniprofile]')
+            || document.querySelector('[data-miniprofile]');
+        if (!holder) return false;
+
+        const style = document.createElement('style');
+        style.textContent = '.miniprofile_hover{visibility:hidden !important;}';
+        document.head.appendChild(style);
+
+        try {
+            lastHoverMiniId = holder.getAttribute('data-miniprofile') || '';
+            for (const type of ['mouseover', 'mouseenter']) {
+                holder.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+            }
+            const ready = await waitFor(() => {
+                const popup = miniPopup();
+                return !!(popup && popup.querySelector('.miniprofile_nameplatecontainer'));
+            }, timeoutMs || 1500);
+            for (const type of ['mouseout', 'mouseleave']) {
+                holder.dispatchEvent(new MouseEvent(type, {
+                    bubbles: true, cancelable: true, view: window, relatedTarget: document.body,
+                }));
+            }
+            return ready;
+        } catch (e) {
+            console.warn('[previewer] simulated hover failed', e);
+            return false;
+        } finally {
+            setTimeout(() => style.remove(), 300);
+        }
+    }
+
+    // Fallback: the endpoint Steam builds these from. Undocumented, hence
+    // second in line, but it needs no rendering and cannot flash on screen.
+    async function fetchMiniProfileValue() {
+        if (!ownerMiniId) return null;
+        try {
+            const url = 'https://steamcommunity.com/miniprofile/' + encodeURIComponent(ownerMiniId)
+                + '?origin=' + encodeURIComponent(location.origin);
+            const response = await fetch(url, { credentials: 'include' });
+            if (!response.ok) return null;
+            const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+            return nameplateValueFrom(doc.querySelector('.miniprofile_nameplatecontainer'));
+        } catch (e) {
+            console.warn('[previewer] mini profile fetch failed', e);
+            return null;
+        }
+    }
+
+    const miniProfileSlot = {
+        id: 'miniProfile',
+        label: 'Mini profile',
+        kinds: ['image', 'video'],
+
+        // Built on hover, not at page load — so its snapshot can't be taken
+        // once up front like the others. Grab re-reads it on demand.
+        volatile: true,
+        emptyHint: 'Couldn\u2019t load your mini profile \u2014 hover your name once, then Grab.',
+
+        find() {
+            const popup = miniPopup();
+            return popup ? popup.querySelector('.miniprofile_nameplatecontainer') : null;
+        },
+
+        snapshot() {
+            const container = this.find();
+            return { value: nameplateValueFrom(container), meta: {} };
+        },
+
+        // Make the popup exist without the user having to hover first:
+        // simulate the hover, and fall back to fetching it.
+        async ensure() {
+            if (this.find()) return null;
+            if (await forceMiniProfileHover(1500)) return null;
+            return await fetchMiniProfileValue();
+        },
+
+        apply(state, value) {
+            state.active = value;   // paintMiniProfile reads this
+            const painted = paintMiniProfile();
+            return {
+                ok: true,
+                message: painted
+                    ? 'Mini profile applied.'
+                    : 'Mini profile saved \u2014 it will show next time you hover your name.',
+            };
+        },
+
+        // Nothing rendered means nothing to have been clobbered. Without
+        // this the auto-reapply watcher would fail three times and pause
+        // itself on every page where you never hover a name.
+        verify(state, value) {
+            const container = this.find();
+            if (!container) return true;
+            if (value.kind === 'video') {
+                // Any source matching either URL counts. Comparing only the
+                // first source against only the preferred URL made this fail
+                // whenever both formats were present: the check said "not
+                // applied", the painter repainted, the repaint woke the
+                // observer, and round it went.
+                const wanted = [value.mp4, value.webm].filter(Boolean);
+                const sources = Array.from(container.querySelectorAll('video source'));
+                if (!sources.length) return false;
+                return sources.some(source =>
+                    wanted.some(url => sameFile(source.getAttribute('src'), url)));
+            }
+            return sameFile(currentImageUrl(container), value.url);
+        },
+
+        restore(state) {
+            const memo = state.miniMemo;
+            if (memo && memo.container && memo.container.isConnected) {
+                memo.container.innerHTML = memo.html;
+            }
+            state.miniMemo = null;
+        },
+
+        peekOut(state) {
+            const memo = state.miniMemo;
+            if (memo && memo.container && memo.container.isConnected) {
+                memo.container.innerHTML = memo.html;
+            }
+            return { swapped: true };
+        },
+
+        peekIn(state) { paintMiniProfile(); },
+    };
+
+    function buildNameplate(value) {
+        if (value.kind === 'video') {
+            const video = document.createElement('video');
+            video.className = 'miniprofile_nameplate';
+            video.autoplay = true;
+            video.muted = true;
+            video.defaultMuted = true;
+            video.loop = true;
+            video.playsInline = true;
+            video.setAttribute('muted', '');
+            video.setAttribute('playsinline', '');
+            if (value.poster) video.poster = value.poster;
+            if (value.webm) {
+                const source = document.createElement('source');
+                source.src = value.webm;
+                source.type = 'video/webm';
+                video.appendChild(source);
+            }
+            if (value.mp4) {
+                const source = document.createElement('source');
+                source.src = value.mp4;
+                source.type = 'video/mp4';
+                video.appendChild(source);
+            }
+            return video;
+        }
+        const img = document.createElement('img');
+        img.className = 'miniprofile_nameplate';
+        img.src = value.url;
+        return img;
+    }
+
+    // Returns true if anything was painted.
+    function paintMiniProfile() {
+        const popup = miniPopup();
+        if (!popup) return false;
+        if (ownerMiniId && lastHoverMiniId && lastHoverMiniId !== ownerMiniId) return false;
+
+        let painted = false;
+
+        const miniState = slotState.miniProfile;
+        const nameplate = miniState && miniState.active;
+        const container = popup.querySelector('.miniprofile_nameplatecontainer');
+        if (nameplate && container) {
+            const already = miniProfileSlot.verify(miniState, nameplate);
+            if (!already) {
+                // Only capture the original once per container: a repaint
+                // would otherwise save our own markup as "the original".
+                if (!miniState.miniMemo || miniState.miniMemo.container !== container) {
+                    miniState.miniMemo = { container, html: container.innerHTML };
+                }
+                container.innerHTML = '';
+                container.appendChild(buildNameplate(nameplate));
+                painted = true;
+            }
+        }
+
+        // The popup carries its own copies of the avatar and frame, and it
+        // didn't exist when those slots collected their targets.
+        const frameValue = slotState.avatarFrame && slotState.avatarFrame.active;
+        const frameEl = popup.querySelector('.playersection_avatar_frame');
+        if (frameValue && frameEl && !sameFile(currentImageUrl(frameEl), frameValue.url)) {
+            setImageSources(frameEl, frameValue.url);
+            painted = true;
+        }
+
+        const avatarValue = slotState.avatar && slotState.avatar.active;
+        const avatarEl = popup.querySelector('.playersection_avatar');
+        if (avatarValue && avatarEl && !sameFile(currentImageUrl(avatarEl), avatarValue.url)) {
+            setImageSources(avatarEl, avatarValue.url);
+            painted = true;
+        }
+
+        return painted;
+    }
+
+    function watchMiniProfile() {
+        // Capture phase: the popup is opened by Steam's own handlers, and we
+        // need to know who was hovered before it renders.
+        document.addEventListener('mouseover', (e) => {
+            const holder = e.target && e.target.closest && e.target.closest('[data-miniprofile]');
+            if (holder) lastHoverMiniId = holder.getAttribute('data-miniprofile') || '';
+        }, true);
+
+        let timer = null;
+        const observer = new MutationObserver(() => {
+            if (peeking) return;
+            // Cheap bail-out: this fires on every mutation on the page.
+            const relevant = (slotState.miniProfile && slotState.miniProfile.active)
+                || (slotState.avatarFrame && slotState.avatarFrame.active)
+                || (slotState.avatar && slotState.avatar.active);
+            if (!relevant) return;
+            clearTimeout(timer);
+            timer = setTimeout(paintMiniProfile, 30);
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    const SLOTS = [backgroundSlot, avatarFrameSlot, avatarSlot, miniProfileSlot];
     const SLOT_BY_ID = {};
     for (const slot of SLOTS) SLOT_BY_ID[slot.id] = slot;
 
@@ -931,6 +1214,9 @@
 
     function snapshotPage() {
         if (snapshotTaken) return;
+        const owner = document.querySelector('.playerAvatar.profile_header_size[data-miniprofile]')
+            || document.querySelector('[data-miniprofile]');
+        ownerMiniId = owner ? (owner.getAttribute('data-miniprofile') || '') : '';
         pageSnapshot = {};
         for (const slot of SLOTS) {
             try { pageSnapshot[slot.id] = slot.snapshot(); }
@@ -941,6 +1227,28 @@
         }
         snapshotTaken = true;
         console.log('[previewer] page snapshot:', pageSnapshot);
+    }
+
+    // Volatile slots (anything built on demand, like the mini profile popup)
+    // have nothing to snapshot at page load, so re-read them when asked.
+    // Skipped once the slot is applied, or we'd capture our own paint back.
+    async function refreshVolatileSnapshot(slotId) {
+        const slot = SLOT_BY_ID[slotId];
+        if (!slot || !slot.volatile) return;
+        if (slotState[slotId].active) return;
+
+        let fetched = null;
+        if (slot.ensure) {
+            try { fetched = await slot.ensure(); }
+            catch (e) { console.warn('[previewer] ensure failed for', slotId, e); }
+        }
+        try {
+            const snap = slot.snapshot();
+            if (snap && snap.value) { pageSnapshot[slotId] = snap; return; }
+        } catch (e) {
+            console.warn('[previewer] volatile snapshot failed for', slotId, e);
+        }
+        if (fetched) pageSnapshot[slotId] = { value: fetched, meta: {} };
     }
 
     function anyActive() {
@@ -1120,6 +1428,244 @@
     // Panel
     // =================================================================
 
+    // ---------------- points shop capture ----------------
+    //
+    // The Points Shop previews items in an in-page modal rather than opening
+    // a profile, and it lives on store.steampowered.com. There's no profile
+    // there to modify, so that page is capture-only: grab the previewed item
+    // into a slot, save it as a preset, and it's waiting on any profile page.
+    // Storage is per-script rather than per-origin, so both domains share it.
+
+    const ON_STORE = location.hostname === 'store.steampowered.com';
+
+    // Order matters: the first match wins when a label is genuinely ambiguous
+    // ("Mini-Profile Background" contains "Profile Background").
+    const STORE_TYPE_PATTERNS = [
+        { slot: 'miniProfile', test: /mini[-\s]?profile/i },
+        { slot: 'avatarFrame', test: /avatar frame/i },
+        // "avatar" but not "avatar frame", so a frame can't match both.
+        { slot: 'avatar', test: /animated avatar|\bavatar\b(?!\s*frame)/i },
+        { slot: 'background', test: /profile background/i },
+    ];
+
+    // Language-independent typing. Amid the hashed class names Steam keeps a
+    // few semantic ones, and they differ per item type:
+    //   mini profile -> a .miniprofile_* element in the preview
+    //   avatar       -> the previewed image itself carries .avatar
+    //   avatar frame -> an img.avatar is on show, but the item is another image
+    //   background   -> no avatar anywhere; a video or a CSS background-image
+    // This also works for items the user already owns, since it never reads
+    // the purchase text.
+    function detectSlotStructural(root, mediaEl) {
+        if (!root || !mediaEl) return '';
+        if (root.querySelector('[class*="miniprofile"]')) return 'miniProfile';
+        if (mediaEl.classList && mediaEl.classList.contains('avatar')) return 'avatar';
+        if (root.querySelector('img.avatar')) {
+            return mediaEl.tagName === 'IMG' ? 'avatarFrame' : '';
+        }
+        return 'background';
+    }
+
+    function slotFromLabel(label) {
+        for (const entry of STORE_TYPE_PATTERNS) {
+            if (entry.test.test(label)) return entry.slot;
+        }
+        return '';
+    }
+
+    // Every shop modal states the type exactly once, in a fixed sentence:
+    // "Use your Steam Points to get this Mini Profile Background." Matching
+    // just that phrase beats scanning the whole modal, where an avatar's
+    // description mentioning "mini profile" was enough to misfile it — and the
+    // avatar's own ancestors carry no text at all to narrow it down.
+    function detectSlotFromContext(mediaEl, fallbackRoot) {
+        const blob = ((fallbackRoot && fallbackRoot.textContent) || '').replace(/\s+/g, ' ');
+        const stated = /get this ([^.]{2,60})\./i.exec(blob);
+        if (stated) {
+            const slot = slotFromLabel(stated[1]);
+            if (slot) return slot;
+        }
+
+        // Tiles have no such sentence: fall back to widening out from the
+        // media until exactly one type matches.
+        let node = mediaEl;
+        for (let depth = 0; node && depth < 5; depth++) {
+            const text = node.textContent || '';
+            const hits = STORE_TYPE_PATTERNS.filter(entry => entry.test.test(text));
+            if (hits.length === 1) return hits[0].slot;
+            node = node.parentElement;
+        }
+        return slotFromLabel(blob);
+    }
+
+    function storeModal() {
+        return document.querySelector('.FullModalOverlay dialog[open]')
+            || document.querySelector('dialog[open]')
+            || document.querySelector('.FullModalOverlay .ModalOverlayContent.active')
+            || null;
+    }
+
+    const ITEM_ASSET = /\/community_assets\/images\/items\/(\d+)\//;
+
+    // Pulls an item out of any container: a shop tile or a preview modal.
+    // Videos before images, because a video item's poster is also an image.
+    function previewFromContainer(root, scope) {
+        if (!root || !root.querySelectorAll) return null;
+        const inScope = url => !!url && ITEM_ASSET.test(url) && (!scope || scope.test(url));
+        const areaOf = (el) => {
+            const rect = el.getBoundingClientRect();
+            return rect.width * rect.height;
+        };
+
+        // Collect everything, then take the biggest. Taking the first in
+        // document order could pick the user's own equipped frame instead of
+        // the item being previewed; the preview is always the largest thing.
+        const candidates = [];
+
+        for (const video of root.querySelectorAll('video')) {
+            const clip = { kind: 'video', mp4: '', webm: '', poster: '' };
+            const poster = video.getAttribute('poster') || '';
+            if (inScope(poster)) clip.poster = poster;
+            for (const source of video.querySelectorAll('source')) {
+                const src = source.getAttribute('src') || '';
+                if (!inScope(src)) continue;
+                const type = source.getAttribute('type') || '';
+                if (/\.webm/i.test(src) || type.includes('webm')) clip.webm = clip.webm || src;
+                else if (/\.mp4/i.test(src) || type.includes('mp4')) clip.mp4 = clip.mp4 || src;
+            }
+            if (clip.mp4 || clip.webm) candidates.push({ value: clip, el: video, area: areaOf(video) });
+            else if (clip.poster) {
+                candidates.push({ value: { kind: 'image', url: clip.poster }, el: video, area: areaOf(video) });
+            }
+        }
+
+        for (const img of root.querySelectorAll('img')) {
+            const src = img.getAttribute('src') || '';
+            if (!inScope(src)) continue;
+            candidates.push({ value: { kind: 'image', url: src }, el: img, area: areaOf(img) });
+        }
+
+        // Static backgrounds aren't an <img> at all — they're painted as a CSS
+        // background-image on a div.
+        for (const el of root.querySelectorAll('[style*="background-image"]')) {
+            const url = urlFromCssValue(el.getAttribute('style') || '');
+            if (!inScope(url)) continue;
+            candidates.push({ value: { kind: 'image', url }, el, area: areaOf(el) });
+        }
+
+        if (!candidates.length) return null;
+        candidates.sort((a, b) => b.area - a.area);
+        const best = candidates[0];
+
+        return {
+            slotId: detectSlotStructural(root, best.el) || detectSlotFromContext(best.el, root),
+            value: best.value,
+            title: '',
+            mediaEl: best.el,
+        };
+    }
+
+    // Returns { slotId, value, title } describing whatever the modal shows.
+    function storePreviewValue() {
+        const modal = storeModal();
+        if (!modal) return null;
+
+        // The item's own assets sit under /items/<appid>/. Scoping to that
+        // skips your own avatar frame and the app capsule in the same modal.
+        const link = modal.querySelector('a[href*="/points/shop/app/"]');
+        const appMatch = link ? (link.getAttribute('href') || '').match(/\/app\/(\d+)/) : null;
+        const scope = appMatch ? new RegExp('/items/' + appMatch[1] + '/') : null;
+
+        // Scope to the item's own appid first; if that finds nothing, retry
+        // accepting any Steam item media in the modal.
+        const found = previewFromContainer(modal, scope) || previewFromContainer(modal, null);
+        if (!found) return null;
+
+        const titleNode = modal.querySelector('h1, h2, [class*="title"]');
+        found.title = titleNode ? titleNode.textContent.trim().slice(0, 60) : '';
+        return found;
+    }
+
+    // Clicking our panel counts as a click outside Steam's modal, so Steam
+    // dismisses the preview before Grab can read it. Remember each preview as
+    // it appears and read the remembered value instead of racing the DOM.
+    let lastStorePreview = null;
+
+    // Registered at document-start, so these run before Steam's own document
+    // listeners. Capture: snapshot the preview before Steam can close it, so
+    // the first Grab click works. Bubble: stopImmediatePropagation kills
+    // Steam's dismiss listener on the same node — plain stopPropagation can't,
+    // since it only stops OTHER nodes.
+    //
+    // mouseup and mousemove are deliberately not guarded: the panel drag ends
+    // on document mouseup, and blocking it leaves the panel stuck to the cursor.
+    function guardPanelClicks() {
+        const inPanel = (e) => {
+            const t = e.target;
+            return !!(t && t.closest && t.closest('#pp-panel'));
+        };
+        for (const type of ['pointerdown', 'mousedown', 'click']) {
+            document.addEventListener(type, (e) => {
+                if (!inPanel(e)) return;
+                const preview = storePreviewValue();
+                if (preview) lastStorePreview = preview;
+            }, true);
+            document.addEventListener(type, (e) => {
+                if (inPanel(e)) e.stopImmediatePropagation();
+            }, false);
+        }
+
+        // Capture-phase blocking is the only thing that can beat Steam's
+        // dismiss handler, but it also stops the event reaching our own
+        // controls — that's what killed the buttons in 1.10 and stuck the
+        // panel to the cursor in 1.11. So block exactly one event type that
+        // nothing of ours listens for: buttons use click, dragging uses
+        // mousedown. If Steam dismisses on pointerdown this keeps the preview
+        // open; if it dismisses on something else, this costs nothing.
+        document.addEventListener('pointerdown', (e) => {
+            if (inPanel(e)) e.stopImmediatePropagation();
+        }, true);
+    }
+
+    function watchStorePreviews() {
+        let timer = null;
+        const observer = new MutationObserver(() => {
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                const preview = storePreviewValue();
+                if (preview) lastStorePreview = preview;
+            }, 100);
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        const initial = storePreviewValue();
+        if (initial) lastStorePreview = initial;
+
+        // The reliable one: just look, repeatedly. Whatever the preview is,
+        // it's cached before you click anything, so Grab never has to race
+        // Steam's close handler.
+        setInterval(() => {
+            const preview = storePreviewValue();
+            if (preview) lastStorePreview = preview;
+        }, 250);
+
+        // Second capture point: the tile itself. Shop tiles
+        // already carry the item's sources, poster and type label, so this
+        // records the item before any modal exists — and survives Steam
+        // closing that modal the moment our panel is clicked.
+        document.addEventListener('pointerdown', (e) => {
+            const target = e.target;
+            if (!target || !target.closest || target.closest('#pp-panel')) return;
+            // Walk outwards from the click: the first ancestor holding item
+            // media is the tile, not the whole grid.
+            let node = target;
+            for (let depth = 0; node && node !== document.body && depth < 8; depth++) {
+                const found = previewFromContainer(node, null);
+                if (found) { lastStorePreview = found; return; }
+                node = node.parentElement;
+            }
+        }, true);
+    }
+
     function slotRowsMarkup() {
         return SLOTS.map(slot => {
             const kindToggle = slot.kinds.length > 1
@@ -1149,8 +1695,9 @@
                         background:#0e1620; overflow:hidden; display:flex; align-items:center; justify-content:center;"></div>
                     <div style="flex:1; min-width:0; font-size:11px;">${slot.label}</div>
                     <span data-slotstate="${slot.id}" style="flex:none; font-size:10px; color:#7a8b99;">none</span>
-                    <span data-slotgrab="${slot.id}" title="Grab just this page's ${slot.label.toLowerCase()} and apply it"
-                        style="flex:none; cursor:pointer; color:#66c0f4; padding:0 3px; font-size:12px;">&#8681;</span>
+                    <button data-slotgrab="${slot.id}" title="Grab just this page's ${slot.label.toLowerCase()} and apply it"
+                        style="flex:none; cursor:pointer; padding:2px 6px; font-size:10px; background:transparent;
+                        border:1px solid #66c0f4; border-radius:3px; color:#66c0f4;">Grab</button>
                     <span data-slotclear="${slot.id}" title="Clear this slot"
                         style="flex:none; cursor:pointer; color:#7a8b99; padding:0 3px; font-size:14px;">&times;</span>
                 </div>
@@ -1161,15 +1708,70 @@
         }).join('');
     }
 
+    function versionRank(text) {
+        return (text || '0').split('.').map(n => parseInt(n, 10) || 0);
+    }
+
+    function isNewerThan(a, b) {
+        const left = versionRank(a);
+        const right = versionRank(b);
+        for (let i = 0; i < Math.max(left.length, right.length); i++) {
+            const diff = (left[i] || 0) - (right[i] || 0);
+            if (diff) return diff > 0;
+        }
+        return false;
+    }
+
     async function createPanel() {
-        if (document.getElementById('pp-panel')) return;
+        // The version sits in @name, so each release installs as its own script
+        // rather than an update and two can be enabled at once. Newer wins,
+        // rather than whichever happened to load first.
+        const existing = document.getElementById('pp-panel');
+        if (existing) {
+            if (!isNewerThan(SCRIPT_VERSION, existing.dataset.ppVersion)) return;
+            console.warn('[previewer] replacing panel from older version', existing.dataset.ppVersion);
+            existing.remove();
+        }
 
         snapshotPage();
 
+        // Each site's global CSS reaches into the panel — form controls don't
+        // inherit fonts, and the store styles them differently from the
+        // community pages. Pin them so both look the same.
+        if (!document.getElementById('pp-style')) {
+            const style = document.createElement('style');
+            style.id = 'pp-style';
+            style.textContent = [
+                '#pp-panel, #pp-panel * { font-family: Arial, Helvetica, sans-serif !important;',
+                '  box-sizing: border-box; letter-spacing: normal !important;',
+                '  text-transform: none !important; }',
+                '#pp-panel input[type="text"] { font-size: 12px !important;',
+                '  color: #c7d5e0 !important; background: #0e1620 !important;',
+                '  border: 1px solid #2a475e !important; border-radius: 2px; }',
+                '#pp-panel input[type="text"]::placeholder { color: #7a8b99; font-style: italic; }',
+                // No !important on the size: it was overriding the inline 10px
+                // on the small per-row buttons and blowing them up.
+                '#pp-panel button { font-size: 12px; line-height: normal !important; }',
+                '#pp-panel input[type="checkbox"] { accent-color: #66c0f4; }',
+            ].join('\n');
+            (document.head || document.documentElement).appendChild(style);
+        }
+
         const panel = document.createElement('div');
         panel.id = 'pp-panel';
+        panel.dataset.ppVersion = SCRIPT_VERSION;
+        // Steam's modal renders a full-screen overlay element that sat on top
+        // of this panel: clicks landed on the backdrop instead of our buttons
+        // (the giveaway was the cursor staying an arrow over them), and the
+        // backdrop then dismissed the preview. Both are fixed children of
+        // <body>, so they share a stacking context and the larger z-index
+        // simply wins.
+        // left/bottom/margin/overflow are pinned because the popover UA styles
+        // (used below to reach the top layer) set inset:0 and margin:auto,
+        // which would otherwise drag the panel to the left edge.
         panel.style.cssText = `
-            position: fixed; top: 10px; right: 10px; z-index: 99999;
+            position: fixed; top: 10px; right: 10px; left: auto; bottom: auto;
+            margin: 0; overflow: visible; z-index: 2147483646; font-size: 12px;
             background: #1b2838; border: 1px solid #66c0f4; border-radius: 6px;
             padding: 10px; font-family: Arial, sans-serif; color: #c7d5e0;
             box-shadow: 0 2px 8px rgba(0,0,0,0.5); width: 320px;
@@ -1177,16 +1779,17 @@
         panel.innerHTML = `
             <div id="ppHeader" title="Drag to move"
                 style="display:flex; align-items:center; gap:6px; margin-bottom:8px; cursor:move; user-select:none;">
-                <div style="flex:1; font-weight:bold;">Profile Previewer</div>
+                <span style="flex:none; width:14px;"></span>
+                <div style="flex:1; font-weight:bold; text-align:center; font-size:13px;">Steam Profile Previewer</div>
                 <span id="ppCollapse" title="Collapse"
                     style="cursor:pointer; padding:0 4px; font-size:12px; color:#7a8b99;">&#9662;</span>
             </div>
             <div id="ppBody">
                 <div style="display:flex; gap:6px; margin-bottom:8px;">
-                    <button id="ppGrab" title="Fill every slot with what this page is already using"
+                    <button id="ppGrab" title="Fill every slot with what this page is already using. Each row has its own Grab for just that item."
                         style="flex:1; padding:5px; cursor:pointer; background:#2a475e;
                         border:1px solid #66c0f4; border-radius:3px; color:#c7d5e0;">
-                        Grab from this page
+                        Grab all from this page
                     </button>
                     <button id="ppCopy" title="Copy the URL(s) of this page's own look (not the one you've applied)"
                         style="flex:none; padding:5px 10px; cursor:pointer; background:#2a475e;
@@ -1217,7 +1820,7 @@
 
                 ${slotRowsMarkup()}
 
-                <div style="display:flex; gap:6px; margin-top:8px;">
+                <div id="ppActions" style="display:flex; gap:6px; margin-top:8px;">
                     <button id="ppApply" title="Apply every slot that has URL(s) filled in"
                         style="flex:1; padding:5px; cursor:pointer; background:#66c0f4;
                         border:none; border-radius:3px; color:#1b2838; font-weight:bold;">Apply</button>
@@ -1315,6 +1918,69 @@
         const advancedBox = $('#ppAdvanced');
         const advancedToggle = $('#ppAdvToggle');
 
+        function storeDiagnostics() {
+            const modal = storeModal();
+            const preview = storePreviewValue();
+            const lines = [
+                'url: ' + location.href,
+                'modal found: ' + (modal ? 'yes' : 'no'),
+                'detected slot: ' + (preview ? (preview.slotId || '(none)') : '(no preview)'),
+                'value: ' + (preview ? JSON.stringify(preview.value) : 'none'),
+            ];
+
+            // What the type detection is actually reading, level by level —
+            // this is the part that decides which slot an item lands in.
+            if (preview && preview.mediaEl) {
+                lines.push('media: <' + preview.mediaEl.tagName.toLowerCase() + '> ' +
+                    (preview.mediaEl.getAttribute('src') || preview.mediaEl.getAttribute('poster') || ''));
+                let node = preview.mediaEl;
+                for (let depth = 0; node && depth < 5; depth++) {
+                    const text = (node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+                    const hits = STORE_TYPE_PATTERNS
+                        .filter(entry => entry.test.test(node.textContent || ''))
+                        .map(entry => entry.slot);
+                    lines.push('  level ' + depth + ' <' + node.tagName.toLowerCase() + '.' +
+                        (node.className || '').toString().split(' ')[0] + '>' +
+                        ' matches[' + (hits.join(',') || '-') + ']: ' + (text || '(no text)'));
+                    node = node.parentElement;
+                }
+            }
+            lines.push('cached preview: ' + (lastStorePreview ? JSON.stringify(lastStorePreview.value) : 'none'));
+            if (modal) {
+                const link = modal.querySelector('a[href*="/points/shop/app/"]');
+                lines.push('app link: ' + (link ? link.getAttribute('href') : 'none'));
+                lines.push('videos in modal: ' + modal.querySelectorAll('video').length);
+                lines.push('images in modal: ' + modal.querySelectorAll('img').length);
+                const sources = Array.from(modal.querySelectorAll('source'))
+                    .map(x => x.getAttribute('src')).filter(Boolean);
+                lines.push('modal sources:\n  ' + (sources.join('\n  ') || 'none'));
+            }
+            if (modal) {
+                lines.push('modal background-image elements: ' +
+                    modal.querySelectorAll('[style*="background-image"]').length);
+            }
+            lines.push('item media anywhere on page: ' +
+                Array.from(document.querySelectorAll('source, img, video'))
+                    .filter(x => ITEM_ASSET.test(x.getAttribute('src') || x.getAttribute('poster') || ''))
+                    .length);
+            return lines.join('\n');
+        }
+
+        // Grabbing on the store writes into the applied set rather than just
+        // the fields, so profile tabs pick it up through the same cross-tab
+        // sync that already exists — no Save step, no reload.
+        async function storeStage(slotId, value) {
+            let saved = {};
+            try {
+                const raw = await store.get(STATE_KEY, '');
+                saved = raw ? (JSON.parse(raw) || {}) : {};
+            } catch (e) {
+                saved = {};
+            }
+            saved[slotId] = value;
+            await store.set(STATE_KEY, JSON.stringify(saved));
+        }
+
         // ---------------- slot field plumbing ----------------
 
         function slotKind(slotId) {
@@ -1374,6 +2040,15 @@
             return out;
         }
 
+        // The #t=0.1 fragment is only a hint — whether the browser seeks and
+        // paints that frame depends on how the load went, which is why
+        // thumbnails filled in sometimes and not others. Ask explicitly.
+        function primeThumbVideo(vid) {
+            vid.addEventListener('loadedmetadata', () => {
+                try { if (vid.paused) vid.currentTime = 0.1; } catch (e) {}
+            });
+        }
+
         function refreshSlotRow(slotId) {
             const state = slotState[slotId];
             const label = panel.querySelector(`[data-slotstate="${slotId}"]`);
@@ -1381,14 +2056,37 @@
             label.textContent = state.active ? state.active.kind : 'none';
             label.style.color = state.active ? '#8fbc8f' : '#7a8b99';
             thumb.innerHTML = '';
-            const still = valueStill(state.active) || valueStill(readSlotFields(slotId));
-            if (still) {
+            const value = state.active || readSlotFields(slotId);
+            if (!value) return;
+
+            const still = valueStill(value);
+            const clip = valueClip(value);
+
+            // Video first. Checking for a poster first meant any clip that had
+            // one became a plain <img>, so the background row never animated.
+            if (clip) {
+                const vid = document.createElement('video');
+                if (still) vid.poster = still;   // instant resting frame
+                vid.src = clip;
+                vid.muted = true;
+                vid.defaultMuted = true;
+                vid.loop = true;
+                vid.playsInline = true;
+                vid.preload = 'metadata';
+                vid.setAttribute('muted', '');
+                vid.setAttribute('playsinline', '');
+                vid.style.cssText = 'width:100%; height:100%; object-fit:cover; display:block;';
+                vid.addEventListener('error', () => { thumb.innerHTML = ''; });
+                primeThumbVideo(vid);
+                thumb.appendChild(vid);
+            } else if (still) {
                 const img = document.createElement('img');
                 img.src = still;
                 img.style.cssText = 'width:100%; height:100%; object-fit:cover; display:block;';
                 img.addEventListener('error', () => { thumb.innerHTML = ''; });
                 thumb.appendChild(img);
             }
+            thumb.title = clip ? 'Hover the row to preview' : '';
         }
 
         function refreshAllRows() { for (const slot of SLOTS) refreshSlotRow(slot.id); }
@@ -1397,6 +2095,19 @@
             const head = panel.querySelector(`[data-slothead="${slot.id}"]`);
             const body = panel.querySelector(`[data-slotbody="${slot.id}"]`);
             const caret = panel.querySelector(`[data-slotcaret="${slot.id}"]`);
+            head.addEventListener('mouseenter', () => {
+                const vid = head.querySelector('video');
+                if (!vid) return;
+                const pr = vid.play();
+                if (pr && pr.catch) pr.catch(() => {});
+            });
+            head.addEventListener('mouseleave', () => {
+                const vid = head.querySelector('video');
+                if (!vid) return;
+                vid.pause();
+                try { vid.currentTime = 0.1; } catch (e) {}
+            });
+
             head.addEventListener('click', (e) => {
                 if (e.target.dataset && (e.target.dataset.slotclear || e.target.dataset.slotgrab)) return;
                 const open = body.style.display !== 'none';
@@ -1409,9 +2120,28 @@
             // persists and accumulates while typed fields don't.
             panel.querySelector(`[data-slotgrab="${slot.id}"]`).addEventListener('click', async (e) => {
                 e.stopPropagation();
+                if (ON_STORE) {
+                    // Whatever's previewed goes into the row you clicked, even
+                    // if its type wasn't recognised — that's the escape hatch.
+                    const preview = storePreviewValue() || lastStorePreview;
+                    if (!preview) {
+                        setStatus('Nothing captured \u2014 details below.', true);
+                        showTextFallback('What the grab saw:', storeDiagnostics());
+                        return;
+                    }
+                    writeSlotFields(slot.id, preview.value);
+                    refreshSlotRow(slot.id);
+                    setStatus('Grabbed as ' + slot.label.toLowerCase() +
+                        '. Press Apply to send it to your profile tabs.', false);
+                    return;
+                }
+
+                if (slot.volatile) setStatus('Loading the ' + slot.label.toLowerCase() + '\u2026', false);
+                await refreshVolatileSnapshot(slot.id);
                 const snap = pageSnapshot[slot.id];
                 if (!snap || !snap.value) {
-                    setStatus('This page has no ' + slot.label.toLowerCase() + ' of its own to grab.', true);
+                    setStatus(slot.emptyHint
+                        || ('This page has no ' + slot.label.toLowerCase() + ' of its own to grab.'), true);
                     return;
                 }
                 writeSlotFields(slot.id, snap.value);
@@ -1466,8 +2196,28 @@
 
         // ---------------- grab / copy / apply / clear / peek ----------------
 
-        $('#ppGrab').addEventListener('click', () => {
+        $('#ppGrab').addEventListener('click', async () => {
+            if (ON_STORE) {
+                const preview = storePreviewValue() || lastStorePreview;
+                if (!preview) {
+                    setStatus('Nothing captured \u2014 details below.', true);
+                    showTextFallback('What the grab saw:', storeDiagnostics());
+                    return;
+                }
+                if (!preview.slotId) {
+                    setStatus('Couldn\u2019t tell what kind of item that is \u2014 use the Grab button on the row you want.', true);
+                    return;
+                }
+                writeSlotFields(preview.slotId, preview.value);
+                refreshSlotRow(preview.slotId);
+                setStatus('Grabbed ' + (preview.title ? '"' + preview.title + '" ' : '') + 'as ' +
+                    SLOT_BY_ID[preview.slotId].label.toLowerCase() +
+                    '. Press Apply to send it to your profile tabs.', false);
+                return;
+            }
+
             let found = 0;
+            for (const slot of SLOTS) await refreshVolatileSnapshot(slot.id);
             for (const slot of SLOTS) {
                 const snap = pageSnapshot[slot.id];
                 if (snap && snap.value) { writeSlotFields(slot.id, snap.value); found++; }
@@ -1479,6 +2229,23 @@
         });
 
         $('#ppCopy').addEventListener('click', async () => {
+            if (ON_STORE) {
+                const preview = storePreviewValue();
+                if (!preview) { setStatus('Open an item\u2019s preview first.', true); return; }
+                const v = preview.value;
+                const urls = v.kind === 'image' ? [v.url] : [v.mp4, v.webm, v.poster].filter(Boolean);
+                const text = urls.join('\n');
+                try {
+                    await writeClipboard(text);
+                    setStatus('Copied ' + urls.length + ' URL' + (urls.length === 1 ? '' : 's') + '.', false);
+                } catch (e) {
+                    setStatus('Clipboard blocked \u2014 the URL(s) are below.', true);
+                    showTextFallback('Previewed item URL(s):', text);
+                }
+                return;
+            }
+
+            for (const slot of SLOTS) await refreshVolatileSnapshot(slot.id);
             const lines = [];
             for (const slot of SLOTS) {
                 const value = pageSnapshot[slot.id] && pageSnapshot[slot.id].value;
@@ -1505,6 +2272,14 @@
             const values = readAllFields();
             const ids = Object.keys(values);
             if (!ids.length) { setStatus('Fill in at least one slot first, or press Grab.', true); return; }
+
+            if (ON_STORE) {
+                for (const id of ids) await storeStage(id, values[id]);
+                refreshAllRows();
+                setStatus('Sent ' + ids.length + ' item' + (ids.length === 1 ? '' : 's') +
+                    ' to your profile tabs.', false);
+                return;
+            }
             let applied = 0;
             for (const id of ids) if (applySlot(id, values[id])) applied++;
             await store.set(STATE_KEY, JSON.stringify(activeSet()));
@@ -1513,6 +2288,16 @@
         });
 
         $('#ppClear').addEventListener('click', async () => {
+            if (ON_STORE) {
+                // Without this there's no way to undo a store grab from the
+                // store — it just follows you to your profile tabs.
+                await store.set(STATE_KEY, '');
+                for (const slot of SLOTS) clearSlotFields(slot.id);
+                refreshAllRows();
+                setStatus('Cleared everywhere.', false);
+                return;
+            }
+
             clearAll();
             for (const slot of SLOTS) clearSlotFields(slot.id);
             await store.set(STATE_KEY, '');
@@ -1536,6 +2321,90 @@
         document.addEventListener('keyup', (e) => {
             if (e.key === 'p' || e.key === 'P') peekEnd();
         });
+
+        // Steam's preview is a <dialog> opened with showModal(), so it lives in
+        // the browser's TOP LAYER along with the full-viewport .ModalPosition
+        // div inside it. Nothing outside that dialog can be above it — not a
+        // huge z-index, not even a popover, since a modal dialog opened later
+        // still wins the layer ordering.
+        //
+        // So go inside it. Anything inside the dialog renders in the top layer
+        // too, and a click in there counts as inside the modal, so the preview
+        // no longer dismisses itself. The panel keeps position:fixed, so it
+        // stays put visually rather than jumping into the dialog's layout.
+        let dockedTo = null;
+
+        function dockPanel() {
+            const host = storeModal() || document.body;
+            if (panel.parentElement === host) return;
+
+            host.appendChild(panel);
+            dockedTo = host;
+
+            // Deliberately NOT measured: Steam removes the dialog with the
+            // panel still inside it, so at that moment the panel is detached
+            // and every measurement reads zero — which parked it in the
+            // top-left corner. Re-apply the position we already know instead.
+            placePanel();
+
+            // Moving a node makes the browser reload any <video> inside it, so
+            // the thumbnails lose their seeked frame. Re-prime them rather
+            // than re-rendering the lists, which would reset the scroll.
+            for (const vid of panel.querySelectorAll('video')) {
+                if (!vid.getAttribute('src')) continue;
+                try { vid.load(); } catch (e) {}
+            }
+        }
+
+        // The panel's canonical spot: wherever it was dragged to, or the
+        // default top-right corner.
+        function placePanel() {
+            if (uiState.left === null || uiState.top === null) {
+                panel.style.left = 'auto';
+                panel.style.right = '10px';
+                panel.style.top = '10px';
+                panel.style.bottom = 'auto';
+                return;
+            }
+            const [left, top] = clampToViewport(uiState.left, uiState.top);
+            panel.style.left = left + 'px';
+            panel.style.top = top + 'px';
+            panel.style.right = 'auto';
+        }
+
+        if (ON_STORE) {
+            // Steam removes the dialog with the panel inside it, so waiting for
+            // the next poll left the panel missing for a beat. React to the
+            // removal itself; the interval stays as a backstop.
+            let dockQueued = false;
+            new MutationObserver(() => {
+                if (dockQueued) return;
+                dockQueued = true;
+                requestAnimationFrame(() => {
+                    dockQueued = false;
+                    dockPanel();
+                });
+            }).observe(document.documentElement, { childList: true, subtree: true });
+            setInterval(dockPanel, 250);
+
+            // The reliable way in. Steam's preview covers the panel with a
+            // full-screen layer, so the panel may not be clickable while one
+            // is open — but keys still reach the document, and pressing one
+            // isn't a click outside the preview, so it shouldn't dismiss it.
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+                if (isTypingTarget(e.target)) return;
+                if (e.key === 'g' || e.key === 'G') {
+                    e.preventDefault();
+                    $('#ppGrab').click();
+                } else if (e.key === 'd' || e.key === 'D') {
+                    e.preventDefault();
+                    const report = storeDiagnostics();
+                    console.log('[previewer] store diagnostics\n' + report);
+                    showTextFallback('What the panel can see:', report);
+                }
+            }, true);
+        }
 
         // ---------------- panel chrome ----------------
 
@@ -1729,6 +2598,19 @@
 
         async function applyPreset(p) {
             const values = presetValues(p);
+
+            if (ON_STORE) {
+                // applySlot can't work here, and letting it save an empty
+                // active set would wipe what's applied on the profile tabs.
+                for (const id of Object.keys(values)) {
+                    writeSlotFields(id, values[id]);
+                    await storeStage(id, values[id]);
+                }
+                refreshAllRows();
+                setStatus('"' + p.name + '" sent to your profile tabs.', false);
+                return;
+            }
+
             let applied = 0;
             for (const slot of SLOTS) {
                 if (!values[slot.id]) continue;
@@ -1783,6 +2665,7 @@
                     thumb.innerHTML = '';
                     thumb.appendChild(placeholder('VID'));
                 });
+                primeThumbVideo(vid);
                 thumb.appendChild(vid);
                 thumbObserver.observe(vid);
             } else if (still) {
@@ -2437,6 +3320,19 @@
             let saved = {};
             try { saved = raw ? (JSON.parse(raw) || {}) : {}; } catch (e) { return; }
 
+            if (ON_STORE) {
+                // The store panel's state lives in its fields, not in
+                // activeSet() — which is always empty here, so the diff below
+                // would decide nothing had changed and leave stale thumbnails.
+                for (const slot of SLOTS) {
+                    if (saved[slot.id]) writeSlotFields(slot.id, saved[slot.id]);
+                    else clearSlotFields(slot.id);
+                }
+                refreshAllRows();
+                setStatus('Updated from another tab.', false);
+                return;
+            }
+
             const current = activeSet();
             const ids = new Set([...Object.keys(current), ...Object.keys(saved)]);
             let changed = false;
@@ -2500,17 +3396,44 @@
             console.warn('[previewer] could not read erase backup', e);
         }
 
-        watchForClobber();
-        watchForNavigation();
+        if (ON_STORE) {
+            // Nothing here to apply to, so don't offer to.
+            $('#ppGrab').textContent = 'Grab previewed item';
+            $('#ppGrab').title = 'Grab whatever item preview is open (or press G)';
+            $('#ppCopy').title = 'Copy the URL(s) of the open item preview';
+            $('#ppApply').title = 'Send the filled slots to your profile tabs';
+            $('#ppClear').title = 'Clear everything, here and on your profile tabs';
+
+            // There's no profile here to peek at.
+            const peek = $('#ppPeek');
+            peek.disabled = true;
+            peek.title = 'Only available on a profile page';
+            peek.style.opacity = '0.4';
+            peek.style.cursor = 'default';
+            peek.style.borderColor = '#2a475e';
+
+            watchStorePreviews();
+            setStatus('Points Shop: open a preview, Grab, then Apply.', false);
+        } else {
+            watchForClobber();
+            watchForNavigation();
+            watchMiniProfile();
+        }
     }
 
     function init() {
         createPanel().catch(e => console.error('[previewer] panel failed', e));
     }
 
-    if (document.querySelector('.no_header') || document.querySelector('.profile_header_bg')) {
-        init();
-    } else {
+    // @run-at document-start means this runs before Steam's scripts — which is
+    // the whole point — but also before <body> exists, so booting waits.
+    if (ON_STORE) guardPanelClicks();
+
+    function boot() {
+        if (ON_STORE || document.querySelector('.no_header') || document.querySelector('.profile_header_bg')) {
+            init();
+            return;
+        }
         const observer = new MutationObserver((mutations, obs) => {
             if (document.querySelector('.no_header') || document.querySelector('.profile_header_bg')) {
                 init();
@@ -2518,5 +3441,11 @@
             }
         });
         observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+    } else {
+        boot();
     }
 })();
