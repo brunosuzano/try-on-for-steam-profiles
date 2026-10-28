@@ -18,10 +18,14 @@ says "Steam Profile Previewer" until the stable-name change described under
   several wrong attempts.
 - `ROADMAP.md` — what's left to do, and why in that order.
 - `fixtures/` — real HTML dumps from Steam pages, used to verify detection
-  logic without a browser. `fixtures/README.md` catalogues them. **The dumps
-  are gitignored and must stay that way**: full-page captures contain the
-  logged-in account's `webapi_token`, `sessionID` and account ID, plus other
-  users' SteamIDs. Only the README is committed.
+  logic without a browser. `fixtures/README.md` catalogues them. Raw dumps go
+  in `fixtures/raw/` and **must never be committed**: full-page captures
+  contain the logged-in account's `webapi_token`, session ID, login name and
+  SteamID, plus other users' names and SteamIDs. `tools/sanitize-fixtures.js`
+  writes placeholder-only copies to `fixtures/clean/`, which is what's
+  committed and what tests should read.
+- `tools/sanitize-fixtures.js` — raw → clean fixtures. Refuses to write a file
+  if anything personal survives; extend its rules, never hand-edit around it.
 - `archive/steam-bg-swapper.user.js` — the superseded background-only version.
   Kept for reference; do not edit.
 
@@ -82,7 +86,7 @@ $env:ELECTRON_RUN_AS_NODE = '1'
 ```
 
 ...then install in Tampermonkey and exercise it manually. Detection logic can
-be checked against `fixtures/` with a throwaway Python/Node script rather than
+be checked against `fixtures/clean/` with a throwaway Python/Node script rather than
 a browser — that's how the slot-type rules were validated.
 
 ## Versioning gotcha

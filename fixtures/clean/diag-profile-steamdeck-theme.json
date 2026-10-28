@@ -1,0 +1,147 @@
+{
+  "url": "https://steamcommunity.com/id/user-2",
+  "viewport": {
+    "w": 1920,
+    "h": 945
+  },
+  "bodyClass": "flat_page profile_page has_profile_background SteamDeckTheme responsive_page ",
+  "themeSnapshot": {
+    "kind": "theme",
+    "bodyClass": "SteamDeckTheme",
+    "appid": "",
+    "vars": {
+      "--gradient-right": "transparent",
+      "--gradient-left": "transparent",
+      "--gradient-background": "transparent",
+      "--gradient-background-right": "transparent",
+      "--gradient-background-left": "transparent",
+      "--color-showcase-header": "rgb(149 1 169 / 19%)",
+      "--gradient-showcase-header-left": "rgb(87 89 123 / 0%)",
+      "--btn-background": "rgb(29 10 25 / 10%)",
+      "--btn-background-hover": "rgb(175 52 149 / 21%)",
+      "--btn-outline": "rgb(29 10 25 / 0%)"
+    },
+    "label": "SteamDeck"
+  },
+  "snapshot": {
+    "background": {
+      "value": {
+        "kind": "video",
+        "mp4": "https://shared.fastly.steamstatic.com/community_assets/images/items/1263950/248954cba9bc08b6e16c676f5c1814ff823af907.mp4",
+        "webm": "https://shared.fastly.steamstatic.com/community_assets/images/items/1263950/4d466f77edf3265a253fba79d47bc91a37e34920.webm",
+        "poster": "https://shared.fastly.steamstatic.com/community_assets/images/items/1263950/da538bac62ee5e233cd82bb75b0d3c47ba0cdc03.jpg"
+      },
+      "meta": {
+        "imageStyle": {
+          "size": "100%",
+          "position": "49.999% 0px",
+          "repeat": "no-repeat",
+          "attachment": "scroll",
+          "origin": "padding-box",
+          "clip": "border-box"
+        },
+        "targetRect": {
+          "width": 1906,
+          "height": 4748,
+          "top": 104,
+          "left": 0
+        },
+        "themeVideoBox": {
+          "position": "absolute",
+          "top": "0px",
+          "left": "0px",
+          "width": "1906px",
+          "height": "4748.09px",
+          "transform": "none",
+          "zIndex": "auto",
+          "overflow": "hidden",
+          "rect": {
+            "width": 1906,
+            "height": 4748,
+            "top": 104,
+            "left": 0
+          }
+        },
+        "themeVideoStyle": {
+          "objectFit": "contain",
+          "objectPosition": "50% 50%",
+          "width": "1920px",
+          "height": "1200px",
+          "position": "absolute",
+          "top": "0px",
+          "left": "953px",
+          "transform": "matrix(1, 0, 0, 1, -960, 0)",
+          "intrinsic": "0x0",
+          "rect": {
+            "width": 1920,
+            "height": 1200,
+            "top": 104,
+            "left": -7
+          }
+        }
+      }
+    },
+    "avatarFrame": {
+      "value": {
+        "kind": "image",
+        "url": "https://shared.fastly.steamstatic.com/community_assets/images/items/1675200/f97317f30b106c08ab649e455471f1be605a8c0f.png"
+      },
+      "meta": {}
+    },
+    "avatar": {
+      "value": {
+        "kind": "image",
+        "url": "https://avatars.fastly.steamstatic.com/063c5595489ce9ec0866880adc2ede53d5a846c4_full.jpg"
+      },
+      "meta": {}
+    },
+    "miniProfile": {
+      "value": null,
+      "meta": {}
+    },
+    "theme": {
+      "value": {
+        "kind": "theme",
+        "bodyClass": "SteamDeckTheme",
+        "appid": "",
+        "vars": {
+          "--gradient-right": "transparent",
+          "--gradient-left": "transparent",
+          "--gradient-background": "transparent",
+          "--gradient-background-right": "transparent",
+          "--gradient-background-left": "transparent",
+          "--color-showcase-header": "rgb(149 1 169 / 19%)",
+          "--gradient-showcase-header-left": "rgb(87 89 123 / 0%)",
+          "--btn-background": "rgb(29 10 25 / 10%)",
+          "--btn-background-hover": "rgb(175 52 149 / 21%)",
+          "--btn-outline": "rgb(29 10 25 / 0%)"
+        },
+        "label": "SteamDeck"
+      },
+      "meta": {}
+    }
+  },
+  "applied": {},
+  "slots": {
+    "background": {
+      "hasOriginal": false,
+      "active": null
+    },
+    "avatarFrame": {
+      "hasOriginal": false,
+      "active": null
+    },
+    "avatar": {
+      "hasOriginal": false,
+      "active": null
+    },
+    "miniProfile": {
+      "hasOriginal": false,
+      "active": null
+    },
+    "theme": {
+      "hasOriginal": false,
+      "active": null
+    }
+  }
+}

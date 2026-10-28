@@ -9,6 +9,27 @@ Steam.
 Captured October 2026. If Steam redesigns, these become the "before" and new
 dumps are needed.
 
+## Raw and clean
+
+- `raw/`: dumps exactly as saved from the browser. **Gitignored.** They hold
+  the logged-in account's `webapi_token`, session ID, login name and
+  SteamID, plus other users' names, SteamIDs, real names and comments.
+- `clean/`: the same files with all of that replaced by placeholders
+  (`User 1`, `user-1`, fake SteamIDs, `REDACTED.TOKEN.VALUE`). Committed. Use
+  these for testing; the tables below refer to them.
+
+To add a dump: save it into `raw/`, then run
+
+```bash
+node tools/sanitize-fixtures.js
+```
+
+The same person gets the same placeholder in every file, so owner/visitor
+comparisons still work. If anything personal survives, the script refuses
+to write that file and says what's left. Extend its rules rather than
+committing by hand. Avatar images and item URLs are kept: detection needs
+them, and they're public assets.
+
 ## Points Shop — isolated modal fragments
 
 Small, fast to parse, best for testing item-type detection and asset
@@ -70,7 +91,7 @@ structural slot-type rules still classify all five modal fragments correctly.
 
 ```python
 import re, glob
-for f in sorted(glob.glob('fixtures/shop-modal-*.html')):
+for f in sorted(glob.glob('fixtures/clean/shop-modal-*.html')):
     h = open(f, encoding='utf-8', errors='ignore').read()
     mini = 'miniprofile' in h
     appid = re.search(r'/points/shop/app/(\d+)', h)

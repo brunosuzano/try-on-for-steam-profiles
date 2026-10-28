@@ -23,10 +23,13 @@ dist/
 *.xpi
 *.crx
 
-# Real Steam page dumps: contain the account's webapi_token, sessionID and
-# other users' SteamIDs. Keep them local; only the catalogue is committed.
+# Real Steam page dumps contain the account's webapi_token, session ID, login
+# name and other users' names and SteamIDs. Raw dumps stay local; only the
+# output of tools/sanitize-fixtures.js (fixtures/clean/) is committed.
+# Anything else dropped into fixtures/ is ignored by default.
 fixtures/*
 !fixtures/README.md
+!fixtures/clean/
 
 # Local scratch
 *.log
