@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Try-On for Steam Profiles
 // @namespace    https://github.com/brunosuzano/steam-profile-previewer
-// @version      1.43
+// @version      1.44
 // @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
 // @author       Bruno Moreira
 // @license      MIT
@@ -33,7 +33,7 @@
     // identically to 9.11, the abstraction fits.
     // =================================================================
 
-    const SCRIPT_VERSION = '1.43';
+    const SCRIPT_VERSION = '1.44';
     const STATE_KEY = 'ppApplied';
     const PRESETS_KEY = 'ppPresets';
     const AUTO_KEY = 'ppAuto';
@@ -213,8 +213,15 @@
     function sameValue(a, b) {
         if (!a || !b || a.kind !== b.kind) return false;
         if (a.kind === 'theme') {
+            // Key by key, not JSON.stringify: a bundle grab parses the
+            // variables in stylesheet order, a profile grab in THEME_VARS
+            // order, and the same theme must compare equal either way.
+            const av = a.vars || {};
+            const bv = b.vars || {};
+            const names = Object.keys(av);
             return a.bodyClass === b.bodyClass &&
-                JSON.stringify(a.vars || {}) === JSON.stringify(b.vars || {});
+                names.length === Object.keys(bv).length &&
+                names.every(name => av[name] === bv[name]);
         }
         if (a.kind === 'image') return (a.url || '') === (b.url || '');
         if (a.mp4 && a.mp4 === b.mp4) return true;
@@ -3642,18 +3649,47 @@
             return /^https?:\/\//i.test(trimmed) ? trimmed : '';
         }
 
+        // Presets grabbed before 1.43 can hold Steam's broken
+        // ".../items/<appid>/undefined" sources. Drop them on the way in.
+        function sanitizeMediaUrl(value) {
+            const url = sanitizeUrl(value);
+            return (ITEM_ASSET.test(url) && !ITEM_FILE.test(url)) ? '' : url;
+        }
+
         function sanitizeValue(raw) {
             if (!raw || typeof raw !== 'object') return null;
             const kind = raw.kind || raw.mode;      // 'mode' is the v1 spelling
             if (kind === 'image') {
-                const url = sanitizeUrl(raw.url);
+                const url = sanitizeMediaUrl(raw.url);
                 return url ? { kind: 'image', url } : null;
             }
             if (kind === 'video') {
-                const mp4 = sanitizeUrl(raw.mp4);
-                const webm = sanitizeUrl(raw.webm);
+                const mp4 = sanitizeMediaUrl(raw.mp4);
+                const webm = sanitizeMediaUrl(raw.webm);
                 if (!mp4 && !webm) return null;
-                return { kind: 'video', mp4, webm, poster: sanitizeUrl(raw.poster) };
+                return { kind: 'video', mp4, webm, poster: sanitizeMediaUrl(raw.poster) };
+            }
+            // Missing this branch dropped every theme on import, so the
+            // imported copy of a five-slot preset had four and never matched
+            // the original: a duplicate, minus its theme. Values go into
+            // style.setProperty, so only known variable names are kept.
+            if (kind === 'theme') {
+                const cls = typeof raw.bodyClass === 'string' ? raw.bodyClass.trim() : '';
+                const bodyClass = /^[A-Za-z0-9_]*Theme$/.test(cls) ? cls : '';
+                const vars = {};
+                if (raw.vars && typeof raw.vars === 'object') {
+                    for (const name of THEME_VARS) {
+                        if (typeof raw.vars[name] === 'string') vars[name] = raw.vars[name].slice(0, 200);
+                    }
+                }
+                if (!bodyClass && !Object.keys(vars).length) return null;
+                const appid = /^\d+$/.test(raw.appid || '') ? raw.appid : '';
+                const label = typeof raw.label === 'string' ? raw.label.trim().slice(0, 60) : '';
+                return {
+                    kind: 'theme', bodyClass, appid, vars,
+                    thumb: sanitizeUrl(raw.thumb),
+                    label: label || prettyThemeName(bodyClass, appid, vars),
+                };
             }
             return null;
         }
