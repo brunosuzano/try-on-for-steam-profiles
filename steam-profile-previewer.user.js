@@ -1,9 +1,12 @@
 // ==UserScript==
-// @name         Steam Profile Previewer 1.42
-// @namespace    http://tampermonkey.net/
-// @version      1.42
+// @name         Try-On for Steam Profiles
+// @namespace    https://github.com/brunosuzano/steam-profile-previewer
+// @version      1.43
 // @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
 // @author       Bruno Moreira
+// @license      MIT
+// @homepageURL  https://github.com/brunosuzano/steam-profile-previewer
+// @supportURL   https://github.com/brunosuzano/steam-profile-previewer/issues
 // @match        https://steamcommunity.com/*
 // @match        https://store.steampowered.com/points/*
 // @grant        GM_setValue
@@ -30,7 +33,7 @@
     // identically to 9.11, the abstraction fits.
     // =================================================================
 
-    const SCRIPT_VERSION = '1.42';
+    const SCRIPT_VERSION = '1.43';
     const STATE_KEY = 'ppApplied';
     const PRESETS_KEY = 'ppPresets';
     const AUTO_KEY = 'ppAuto';
@@ -2348,7 +2351,7 @@
             <div id="ppHeader" title="Drag to move"
                 style="display:flex; align-items:center; gap:6px; margin-bottom:8px; cursor:move; user-select:none;">
                 <span style="flex:none; width:14px;"></span>
-                <div style="flex:1; font-weight:bold; text-align:center; font-size:13px;">Steam Profile Previewer</div>
+                <div style="flex:1; font-weight:bold; text-align:center; font-size:13px;">Try-On for Steam Profiles</div>
                 <span id="ppCollapse" title="Collapse"
                     style="cursor:pointer; padding:0 4px; font-size:12px; color:#7a8b99;">&#9662;</span>
             </div>

@@ -5,9 +5,8 @@ avatar frame, avatar, mini profile, theme — **without owning or equipping
 them**. Built to answer "which theme's colourway suits this background?"
 before spending Points.
 
-Release name: **Try-On for Steam Profiles**. The script's `@name` still
-says "Steam Profile Previewer" until the stable-name change described under
-"Versioning gotcha". Not affiliated with Valve.
+Release name: **Try-On for Steam Profiles**, which is also the script's
+`@name`. Not affiliated with Valve.
 
 ## Layout
 
@@ -89,12 +88,13 @@ $env:ELECTRON_RUN_AS_NODE = '1'
 be checked against `fixtures/clean/` with a throwaway Python/Node script rather than
 a browser — that's how the slot-type rules were validated.
 
-## Versioning gotcha
+## Versioning
 
-The version currently sits in **both** `@name` and `@version`. Tampermonkey
-keys a script by `@name` + `@namespace`, so every bump installs as a *separate
-script with empty storage* — two panels on screen, presets gone. That's
-deliberate during development (visible version marker, and the script replaces
-older panels at runtime), but **`@name` must become a stable string before any
-public release**, after which only `@version` ever changes. Export presets
-before making that change; they're the only thing that doesn't survive it.
+**Never change `@name` or `@namespace`.** Tampermonkey and Greasy Fork key a
+script by those two, so changing either installs it as a *separate script with
+empty storage*: two panels on screen, presets gone, and existing users stop
+getting updates. They were fixed in 1.43 (before that, the version sat in
+`@name` too).
+
+A release bumps `@version` **and** `SCRIPT_VERSION` together. The constant is
+what lets a newer panel replace an older one when two copies are installed.

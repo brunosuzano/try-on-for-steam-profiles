@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **1.42** (userscript, five slots, feature-complete for
+Current version: **1.43** (userscript, five slots, feature-complete for
 Tampermonkey).
 
 ---
@@ -38,10 +38,9 @@ individually but never end-to-end:
       Steam Profile Changer). Keep "Steam" out of the first word.
 - [ ] **Pick the icon.** Candidates are the swatch-grid and swatch-strip SVGs.
       Flat, bold, three colours, no thin lines; test at 16px before committing.
-- [ ] **Revert `@name` to a stable string** — version lives in `@version`
-      alone from then on. **Export presets first**; this starts a fresh
-      storage bucket. See the versioning note in CLAUDE.md. Do this last,
-      after iteration stops.
+- [x] **Revert `@name` to a stable string.** Done in 1.43: `@name` is
+      "Try-On for Steam Profiles" and `@namespace` is the GitHub repo URL.
+      Neither changes again; see "Versioning" in CLAUDE.md.
 
 ---
 
