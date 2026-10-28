@@ -1,0 +1,81 @@
+# Steam Profile Customizer
+
+A Tampermonkey userscript that previews Steam profile cosmetics — background,
+avatar frame, avatar, mini profile, theme — **without owning or equipping
+them**. Built to answer "which theme's colourway suits this background?"
+before spending Points.
+
+Working name for release: **Profile Customizer for Steam**.
+Not affiliated with Valve.
+
+## Layout
+
+- `steam-profile-previewer.user.js` — the entire app. One file, no build step,
+  no dependencies. Everything ships in it.
+- `docs/steam-dom-notes.md` — hard-won findings about Steam's DOM and CSS.
+  **Read this before changing any selector or geometry.** Every rule in it cost
+  several wrong attempts.
+- `ROADMAP.md` — what's left to do, and why in that order.
+- `fixtures/` — real HTML dumps from Steam pages, used to verify detection
+  logic without a browser.
+- `archive/steam-bg-swapper.user.js` — the superseded background-only version.
+  Kept for reference; do not edit.
+
+## Architecture in one paragraph
+
+Everything is a **slot**: an object declaring `find`, `snapshot`, `capture`,
+`apply`, `verify`, `restore`, `peekOut`, `peekIn`. `SLOTS` holds five of them.
+All the machinery — grab, apply, clear, peek, presets, auto-reapply, cross-tab
+sync, undo, erase — loops over `SLOTS` and knows nothing about what a
+"background" is. Adding a sixth slot is a declaration, not a subsystem. A
+**preset** is `{name, slots: {...}}` holding any subset, which is what lets one
+preset be a whole look and another be a single background. Storage goes through
+a shim (`store.get/set/subscribe`) that wraps `GM_*`, `chrome.storage.local`
+and `localStorage`, so the eventual extension port is a backend swap.
+
+## Rules that matter
+
+**Verify patches against the file, not against the patch script.** A failed
+assertion in a multi-edit script discards every edit in that batch. After
+editing, grep the file for the changed strings and confirm they landed. This
+has caused a wasted release once already.
+
+**Measure before changing detection.** Steam's class names are private
+implementation detail. When something detects wrongly, get a real HTML dump or
+the in-app diagnostics (Advanced → Copy sizing diagnostics, or press **D** on
+the Points Shop) and read what's actually there. Guessing at markup has cost
+more rounds in this project than anything else.
+
+**Detection is layered on purpose.** Each slot tries several `strategies` in
+order and logs which matched. Keep that shape when adding selectors — a Steam
+rename should break one strategy, not the feature.
+
+**Fail loudly.** Silent no-ops are the worst outcome: the user sees nothing and
+assumes the tool is broken. Apply paths verify their own result and write a
+status message. Keep that.
+
+**No telemetry, ever.** No analytics, no servers, no data collection. It's a
+stated selling point in a niche where extensions are rightly distrusted, and it
+keeps the privacy policy to six lines.
+
+## Testing
+
+No test suite. The gates are:
+
+```bash
+node --check steam-profile-previewer.user.js   # syntax, always run this
+```
+
+...then install in Tampermonkey and exercise it manually. Detection logic can
+be checked against `fixtures/` with a throwaway Python/Node script rather than
+a browser — that's how the slot-type rules were validated.
+
+## Versioning gotcha
+
+The version currently sits in **both** `@name` and `@version`. Tampermonkey
+keys a script by `@name` + `@namespace`, so every bump installs as a *separate
+script with empty storage* — two panels on screen, presets gone. That's
+deliberate during development (visible version marker, and the script replaces
+older panels at runtime), but **`@name` must become a stable string before any
+public release**, after which only `@version` ever changes. Export presets
+before making that change; they're the only thing that doesn't survive it.

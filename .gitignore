@@ -1,0 +1,28 @@
+# OS cruft
+.DS_Store
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node (no dependencies today; harmless if tooling appears later)
+node_modules/
+npm-debug.log*
+
+# Build output for the future extension port
+dist/
+*.zip
+*.xpi
+*.crx
+
+# Local scratch
+*.log
+.env
