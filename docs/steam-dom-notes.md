@@ -146,6 +146,19 @@ they grab as nothing if you only look for img/video. **Pick the largest
 candidate**, not the first in document order, or you grab the viewer's own
 equipped frame instead of the item.
 
+**The viewer's own equipped items are in every preview modal** (e.g. their
+frame, `items/978460/…`). Anything that counts items must scope to the
+modal's app link (`/points/shop/app/<appid>` → `/items/<appid>/`). An
+unscoped bundle check counted the viewer's frame as a second piece and filed a
+single mini profile as a "bundle" of background + avatar. Real bundle pieces
+all share the bundle's appid, so bundle detection never falls back to
+unscoped.
+
+**Steam emits broken `<source>` elements**: a video can carry
+`src=".../items/<appid>/undefined"` beside the real `.webm`. Seen on Debut
+Collection mini profiles, October 2026. Accept item URLs only if they end in a
+file extension.
+
 **Game Profile bundles embed the real preview in a cross-origin `<iframe>`**
 (`?previewprofile=1&appid=…&itemtype=…`). The dialog itself only has the item
 list, whose background thumbnail is a `?size=320x200` crop. Fetch the iframe's

@@ -1791,12 +1791,16 @@
     }
 
     const ITEM_ASSET = /\/community_assets\/images\/items\/(\d+)\//;
+    // Steam sometimes emits a <source> whose src ends in ".../undefined" next
+    // to the real one. Real assets always end in a file extension.
+    const ITEM_FILE = /\/[^\/?#]+\.[a-z0-9]{2,5}(?:[?#]|$)/i;
+    const isItemAsset = url => !!url && ITEM_ASSET.test(url) && ITEM_FILE.test(url);
 
     // Pulls an item out of any container: a shop tile or a preview modal.
     // Videos before images, because a video item's poster is also an image.
     function previewFromContainer(root, scope) {
         if (!root || !root.querySelectorAll) return null;
-        const inScope = url => !!url && ITEM_ASSET.test(url) && (!scope || scope.test(url));
+        const inScope = url => isItemAsset(url) && (!scope || scope.test(url));
         const areaOf = (el) => {
             const rect = el.getBoundingClientRect();
             return rect.width * rect.height;
@@ -2043,7 +2047,7 @@
     // background. This pulls each piece out and assigns it by structure.
     function bundleFromContainer(root, scope) {
         if (!root || !root.querySelectorAll) return null;
-        const inScope = url => !!url && ITEM_ASSET.test(url) && (!scope || scope.test(url));
+        const inScope = url => isItemAsset(url) && (!scope || scope.test(url));
         const found = {};
 
         const claim = (slotId, value, el) => {
@@ -2129,7 +2133,10 @@
         // accepting any Steam item media in the modal.
         // A Game Profile bundle contains several items at once; grabbing it as
         // a single asset picked whichever image was largest and mislabelled it.
-        const bundle = bundleFromContainer(modal, scope) || bundleFromContainer(modal, null);
+        // Bundles get no unscoped retry: every piece shares the bundle's appid,
+        // and an unscoped pass counts the viewer's own equipped frame as a
+        // second piece, turning any single item into a fake two-piece bundle.
+        const bundle = bundleFromContainer(modal, scope);
 
         const found = previewFromContainer(modal, scope) || previewFromContainer(modal, null);
         if (!found) return bundle ? { slotId: '', value: null, title: '', bundle } : null;
@@ -3927,7 +3934,7 @@
                 await store.set(STATE_KEY, JSON.stringify(backup.applied));
                 for (const id of Object.keys(backup.applied)) {
                     writeSlotFields(id, backup.applied[id]);
-                    applySlot(id, backup.applied[id]);
+                    if (!ON_STORE) applySlot(id, backup.applied[id]);
                 }
                 refreshAllRows();
             }
@@ -4036,7 +4043,11 @@
                 for (const id of Object.keys(saved)) {
                     if (!SLOT_BY_ID[id]) continue;
                     writeSlotFields(id, saved[id]);
-                    applySlot(id, saved[id]);
+                    // The store is capture-only. Most slots fail to apply here
+                    // anyway, but the mini profile "succeeds" (it paints on
+                    // hover), and the stale active value then outranked every
+                    // later grab in its row thumbnail.
+                    if (!ON_STORE) applySlot(id, saved[id]);
                 }
             } catch (e) {
                 console.warn('[previewer] could not parse saved state', e);
