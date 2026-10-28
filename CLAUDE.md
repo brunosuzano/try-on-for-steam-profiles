@@ -1,11 +1,11 @@
-# Profile Customizer for Steam
+# Try-On for Steam Profiles
 
 A Tampermonkey userscript that previews Steam profile cosmetics — background,
 avatar frame, avatar, mini profile, theme — **without owning or equipping
 them**. Built to answer "which theme's colourway suits this background?"
 before spending Points.
 
-Release name: **Profile Customizer for Steam**. The script's `@name` still
+Release name: **Try-On for Steam Profiles**. The script's `@name` still
 says "Steam Profile Previewer" until the stable-name change described under
 "Versioning gotcha". Not affiliated with Valve.
 

@@ -29,11 +29,13 @@ individually but never end-to-end:
 
 ## Before any public release
 
-- [ ] **Confirm the name.** Settled on *Profile Customizer for Steam*, tagline
+- [ ] **Confirm the name.** Settled on *Try-On for Steam Profiles*, tagline
       "Preview backgrounds, avatars, frames and themes before you buy".
-      Search both the Chrome Web Store and AMO for collisions first —
-      "Steam Profile Previewer" and "Steam Profile Modifier" already exist,
-      which is why the name changed. Keep "Steam" as a suffix, not a prefix.
+      AMO checked October 2026: no collision. Still to check by hand:
+      Chrome Web Store and Greasy Fork (both block automated search).
+      Avoid "Preview", "Modifier", "Customizer", "Changer": all taken by
+      tools in this space (Steam Profile Modifier, SteamProfilePreviewer,
+      Steam Profile Changer). Keep "Steam" out of the first word.
 - [ ] **Pick the icon.** Candidates are the swatch-grid and swatch-strip SVGs.
       Flat, bold, three colours, no thin lines; test at 16px before committing.
 - [ ] **Revert `@name` to a stable string** — version lives in `@version`

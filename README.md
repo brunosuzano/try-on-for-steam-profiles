@@ -1,4 +1,4 @@
-# Profile Customizer for Steam
+# Try-On for Steam Profiles
 
 See how a Steam profile would look with a different background, avatar,
 avatar frame, mini profile or theme, **before you buy or equip anything**.
