@@ -1,12 +1,13 @@
-# Steam Profile Customizer
+# Profile Customizer for Steam
 
 A Tampermonkey userscript that previews Steam profile cosmetics — background,
 avatar frame, avatar, mini profile, theme — **without owning or equipping
 them**. Built to answer "which theme's colourway suits this background?"
 before spending Points.
 
-Working name for release: **Profile Customizer for Steam**.
-Not affiliated with Valve.
+Release name: **Profile Customizer for Steam**. The script's `@name` still
+says "Steam Profile Previewer" until the stable-name change described under
+"Versioning gotcha". Not affiliated with Valve.
 
 ## Layout
 
@@ -17,7 +18,10 @@ Not affiliated with Valve.
   several wrong attempts.
 - `ROADMAP.md` — what's left to do, and why in that order.
 - `fixtures/` — real HTML dumps from Steam pages, used to verify detection
-  logic without a browser.
+  logic without a browser. `fixtures/README.md` catalogues them. **The dumps
+  are gitignored and must stay that way**: full-page captures contain the
+  logged-in account's `webapi_token`, `sessionID` and account ID, plus other
+  users' SteamIDs. Only the README is committed.
 - `archive/steam-bg-swapper.user.js` — the superseded background-only version.
   Kept for reference; do not edit.
 
@@ -56,7 +60,9 @@ status message. Keep that.
 
 **No telemetry, ever.** No analytics, no servers, no data collection. It's a
 stated selling point in a niche where extensions are rightly distrusted, and it
-keeps the privacy policy to six lines.
+keeps the privacy policy to six lines. The only network requests go to Steam
+(`steamcommunity.com`, `store.steampowered.com`) to read item details; adding
+any other host means rewriting the privacy policy, so don't.
 
 ## Testing
 
@@ -64,6 +70,15 @@ No test suite. The gates are:
 
 ```bash
 node --check steam-profile-previewer.user.js   # syntax, always run this
+```
+
+Node isn't installed on the dev machine. VS Code's bundled Node does the same
+job (exit code 0 = OK; `Start-Process -Wait -PassThru` is needed to read it,
+since Code.exe is a GUI binary):
+
+```powershell
+$env:ELECTRON_RUN_AS_NODE = '1'
+& "C:\Program Files\Microsoft VS Code\Code.exe" --check steam-profile-previewer.user.js
 ```
 
 ...then install in Tampermonkey and exercise it manually. Detection logic can

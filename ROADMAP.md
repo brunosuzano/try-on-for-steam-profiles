@@ -67,11 +67,15 @@ Safari is out of scope — needs a Mac, Xcode, and $99/year.
 
 ## Stage 3 — publishing
 
-- [ ] Repo, licence, README
+- [x] Repo, licence, README
 - [ ] Privacy policy on GitHub Pages. Six lines: collects nothing, no
-      analytics, no servers, URLs stored locally, no requests except the
-      browser loading the media you point it at. Stays six lines as long as
-      rule 5 in CLAUDE.md holds.
+      analytics, no servers, presets and URLs stored locally. Network
+      requests go to Steam only (`steamcommunity.com`,
+      `store.steampowered.com`) to read item details from the pages being
+      previewed; the mini profile lookup carries the user's own Steam
+      cookies, exactly as Steam's own page would. Nothing is sent anywhere
+      else. Stays six lines as long as the no-telemetry rule in CLAUDE.md
+      holds.
 - [ ] Listing assets: 128px icon, 1280×800 screenshots, description,
       single-purpose statement, per-permission justifications
 - [ ] Submit: Chrome ($5 one-time, covers all future extensions), AMO (free),

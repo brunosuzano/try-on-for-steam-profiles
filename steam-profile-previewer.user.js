@@ -2,8 +2,8 @@
 // @name         Steam Profile Previewer 1.42
 // @namespace    http://tampermonkey.net/
 // @version      1.42
-// @description  Preview Steam profile themes with your own background, avatar frame and avatar
-// @author       You
+// @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
+// @author       Bruno Moreira
 // @match        https://steamcommunity.com/*
 // @match        https://store.steampowered.com/points/*
 // @grant        GM_setValue

@@ -23,6 +23,11 @@ dist/
 *.xpi
 *.crx
 
+# Real Steam page dumps: contain the account's webapi_token, sessionID and
+# other users' SteamIDs. Keep them local; only the catalogue is committed.
+fixtures/*
+!fixtures/README.md
+
 # Local scratch
 *.log
 .env
