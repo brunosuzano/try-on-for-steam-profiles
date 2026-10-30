@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         Try-On for Steam Profiles
 // @namespace    https://github.com/brunosuzano/steam-profile-previewer
-// @version      1.44
+// @version      1.45
 // @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
 // @author       Bruno Moreira
 // @license      MIT
 // @homepageURL  https://github.com/brunosuzano/steam-profile-previewer
 // @supportURL   https://github.com/brunosuzano/steam-profile-previewer/issues
+// @icon         data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAADlSURBVDhPYxBVMJWQVjdfJKVh/kJaw+I/MRisVt18EUgvg5SG+XIV6+D/ppHV/62SOojCILUgPSC9DNLq5h9gmtFtwoVhhoD0MsAEYAZkTd0Px8k9W8AYWQxdPU4DAoqm/JfRtgbjoJLppBtg4BoLd7KxZyLpBvjnTyTfBZlT9v0PLJ763y6qDIxBbJAY0QY4RFfAnQ/DIDGiDVA0dMYwACRG0ABSMdyA/qwrGDjtwBcU/KDCCwNTyQB18w/omok2AJSUQRkCXTOxBoAzEyhLFiRs+tiecZpoAy6U+v1flhX2EaQXAKQkIw1F6nl0AAAAAElFTkSuQmCC
 // @match        https://steamcommunity.com/*
 // @match        https://store.steampowered.com/points/*
 // @grant        GM_setValue
@@ -33,7 +34,7 @@
     // identically to 9.11, the abstraction fits.
     // =================================================================
 
-    const SCRIPT_VERSION = '1.44';
+    const SCRIPT_VERSION = '1.45';
     const STATE_KEY = 'ppApplied';
     const PRESETS_KEY = 'ppPresets';
     const AUTO_KEY = 'ppAuto';

@@ -34,3 +34,6 @@ fixtures/*
 # Local scratch
 *.log
 .env
+
+# Icon drafts and AI-generated concept images, kept locally for reference
+icons/legacy/
