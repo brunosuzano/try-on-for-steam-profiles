@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Try-On for Steam Profiles
-// @namespace    https://github.com/brunosuzano/steam-profile-previewer
+// @namespace    https://github.com/brunosuzano/try-on-for-steam-profiles
 // @version      1.46
 // @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
 // @author       Bruno Moreira

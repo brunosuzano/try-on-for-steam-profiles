@@ -93,9 +93,10 @@ a browser — that's how the slot-type rules were validated.
 **Never change `@name` or `@namespace`.** Tampermonkey and Greasy Fork key a
 script by those two, so changing either installs it as a *separate script with
 empty storage*: two panels on screen, presets gone, and existing users stop
-getting updates. They were fixed in 1.43 (before that, the version sat in
-`@name` too). `@namespace` still holds the repo's pre-rename URL
-(`steam-profile-previewer`) on purpose: it's an identifier, not a link.
+getting updates. `@name` was fixed in 1.43; `@namespace` was moved to the
+renamed repo's URL in 1.46, before any public release. Both are final now.
+If the repo is ever renamed again, `@namespace` stays: it's an identifier,
+not a link.
 
 Updates come from `@downloadURL`/`@updateURL` (the raw file on GitHub's
 `main`), so **pushing to `main` with a higher `@version` is a release**: every
