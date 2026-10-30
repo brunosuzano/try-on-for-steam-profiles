@@ -2485,8 +2485,10 @@
                     </button>
                 </div>
 
-                <div style="font-size:11px; color:#7a8b99; margin-bottom:4px;">Presets</div>
-                <div id="ppPresetList" style="max-height:132px; overflow-y:auto; margin-bottom:6px;
+                <div id="ppPresetHeading" style="font-size:11px; color:#7a8b99; margin-bottom:4px;">Presets</div>
+                <!-- 4.5 rows of 33px plus the border: a half-cut row is what
+                     says "scroll for more". At exactly 4 the list looked complete. -->
+                <div id="ppPresetList" style="max-height:150px; overflow-y:auto; margin-bottom:6px;
                     border:1px solid #2a475e; border-radius:3px;"></div>
                 <div id="ppUndoBar" style="display:none; align-items:center; gap:6px; margin-bottom:6px;
                     padding:4px 6px; border:1px solid #66c0f4; border-radius:3px; background:#22394d; font-size:11px;">
@@ -3622,9 +3624,27 @@
             for (const child of presetList.children) child.style.boxShadow = '';
         }
 
+        // A new row lands at the bottom of a list that may already be full, so
+        // a save looked like nothing happened. Bring the row into view and
+        // flash it. Scrolls the list only: scrollIntoView would also scroll
+        // the page, or Steam's dialog on the store.
+        function revealPreset(index) {
+            const row = presetList.children[index];
+            if (!row) return;
+            const listRect = presetList.getBoundingClientRect();
+            const rowRect = row.getBoundingClientRect();
+            if (rowRect.bottom > listRect.bottom) presetList.scrollTop += rowRect.bottom - listRect.bottom;
+            else if (rowRect.top < listRect.top) presetList.scrollTop -= listRect.top - rowRect.top;
+            if (row.animate) {
+                row.animate([{ background: '#3d6d8f' }, { background: 'transparent' }],
+                    { duration: 1200, easing: 'ease-out' });
+            }
+        }
+
         function renderPresets() {
             thumbObserver.disconnect();
             presetList.innerHTML = '';
+            $('#ppPresetHeading').textContent = presets.length ? 'Presets (' + presets.length + ')' : 'Presets';
             if (!presets.length) {
                 const empty = document.createElement('div');
                 empty.style.cssText = 'padding:6px; font-size:11px; color:#7a8b99;';
@@ -3787,9 +3807,11 @@
                     await savePresets();
                     renderPresets();
                     offerUndo('Deleted "' + removed.name + '".', async () => {
-                        presets.splice(Math.min(index, presets.length), 0, removed);
+                        const at = Math.min(index, presets.length);
+                        presets.splice(at, 0, removed);
                         await savePresets();
                         renderPresets();
+                        revealPreset(at);
                         setStatus('Restored "' + removed.name + '".', false);
                     });
                 });
@@ -3822,7 +3844,8 @@
             await savePresets();
             presetNameInput.value = '';
             renderPresets();
-            setStatus('Saved preset "' + candidate.name + '" (from ' + source + ').', false);
+            revealPreset(presets.length - 1);
+            setStatus('Saved "' + candidate.name + '" as preset ' + presets.length + ' (from ' + source + ').', false);
         });
 
         // ---------------- export / import ----------------
