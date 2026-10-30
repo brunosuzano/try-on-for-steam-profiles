@@ -1496,6 +1496,8 @@
     let pageSnapshot = {};      // slotId -> { value, meta }
     let snapshotTaken = false;
     let peeking = false;
+    let peekLatched = false;    // O toggled it on; releasing P or the button doesn't end it
+    let onPeekChange = null;    // set by the panel, to show the latch on the Peek button
     let autoReapply = true;
     let numberKeys = true;
     let confirmDelete = false;
@@ -1659,6 +1661,9 @@
     function applySlot(slotId, rawValue) {
         const slot = SLOT_BY_ID[slotId];
         if (!slot) return false;
+        // A latched peek can sit there while you click a preset. Painting
+        // under it would leave peekIn holding memos of a look that's gone.
+        if (peeking) peekEnd();
         const value = normalizeValue(rawValue);
         if (!value) { setStatus('Nothing to apply for ' + slot.label + '.', true); return false; }
 
@@ -1695,6 +1700,7 @@
         const slot = SLOT_BY_ID[slotId];
         const state = slotState[slotId];
         if (!slot) return;
+        if (peeking) peekEnd();
         try { slot.restore(state); }
         catch (e) { console.warn('[previewer] restore failed for', slotId, e); }
         state.original = null;
@@ -1732,7 +1738,29 @@
             state.peek = null;
         }
         peeking = false;
+        peekLatched = false;
+        if (onPeekChange) onPeekChange();
         setStatus('Back to your version.', false);
+    }
+
+    // What releasing P or the Peek button does: a held peek ends, a latched
+    // one stays until O is pressed again.
+    function peekRelease() {
+        if (!peekLatched) peekEnd();
+    }
+
+    // O: flip between the try-on and the page's own look, and stay there.
+    function peekToggle() {
+        if (peeking) { peekEnd(); return; }
+        if (!anyActive()) {
+            if (applyHere()) setStatus('Nothing applied yet, so there\u2019s nothing to peek past.', true);
+            return;
+        }
+        peekStart();
+        if (!peeking) return;
+        peekLatched = true;
+        if (onPeekChange) onPeekChange();
+        setStatus('Showing this page\u2019s own look \u2014 press O to go back.', false);
     }
 
     function allStillApplied() {
@@ -1799,6 +1827,8 @@
             state.targets = null;
         }
         peeking = false;
+        peekLatched = false;
+        if (onPeekChange) onPeekChange();
         snapshotTaken = false;
         failedReapplies = 0;
         ownership = { owns: null, via: '' };
@@ -2522,7 +2552,7 @@
                     <button id="ppClear" title="Remove everything you've applied and put the page back"
                         style="flex:1; padding:5px; cursor:pointer; background:#2a475e;
                         border:none; border-radius:3px; color:#c7d5e0;">Clear</button>
-                    <button id="ppPeek" title="Hold to see this page's own look (or hold P)"
+                    <button id="ppPeek" title="Hold to see this page's own look (or hold P). Press O to toggle it and stay."
                         style="flex:1; padding:5px; cursor:pointer; background:#2a475e;
                         border:1px solid #66c0f4; border-radius:3px; color:#c7d5e0;">Peek</button>
                 </div>
@@ -3216,22 +3246,35 @@
             refreshAllRows();
         });
 
+        // Held (button or P) ends on release; latched (O) stays put. Pressing
+        // the button while latched is the obvious way back, so it unlatches.
         const peekBtn = $('#ppPeek');
-        peekBtn.addEventListener('mousedown', (e) => { e.preventDefault(); peekStart(); });
-        peekBtn.addEventListener('mouseup', peekEnd);
-        peekBtn.addEventListener('mouseleave', peekEnd);
-        peekBtn.addEventListener('touchstart', (e) => { e.preventDefault(); peekStart(); }, { passive: false });
-        peekBtn.addEventListener('touchend', peekEnd);
-        window.addEventListener('blur', peekEnd);
+        const peekPress = (e) => {
+            e.preventDefault();
+            if (peekLatched) peekEnd();
+            else peekStart();
+        };
+        peekBtn.addEventListener('mousedown', peekPress);
+        peekBtn.addEventListener('mouseup', peekRelease);
+        peekBtn.addEventListener('mouseleave', peekRelease);
+        peekBtn.addEventListener('touchstart', peekPress, { passive: false });
+        peekBtn.addEventListener('touchend', peekRelease);
+        window.addEventListener('blur', peekRelease);
+
+        onPeekChange = () => {
+            peekBtn.textContent = peekLatched ? 'Peeking (O)' : 'Peek';
+            peekBtn.style.background = peekLatched ? '#66c0f4' : '#2a475e';
+            peekBtn.style.color = peekLatched ? '#1b2838' : '#c7d5e0';
+        };
 
         document.addEventListener('keydown', (e) => {
-            if (e.key !== 'p' && e.key !== 'P') return;
             if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
             if (isTypingTarget(e.target)) return;
-            peekStart();
+            if (e.key === 'p' || e.key === 'P') peekStart();
+            else if (e.key === 'o' || e.key === 'O') peekToggle();
         });
         document.addEventListener('keyup', (e) => {
-            if (e.key === 'p' || e.key === 'P') peekEnd();
+            if (e.key === 'p' || e.key === 'P') peekRelease();
         });
 
         // Steam's preview is a <dialog> opened with showModal(), so it lives in
@@ -3456,7 +3499,7 @@
             if (applyHere()) {
                 $('#ppApply').title = 'Apply every slot that has URL(s) filled in';
                 $('#ppClear').title = 'Remove everything you\u2019ve applied and put the page back';
-                setPeekAvailable(true, 'Hold to see this page\u2019s own look (or hold P)');
+                setPeekAvailable(true, 'Hold to see this page\u2019s own look (or hold P). Press O to toggle it and stay.');
                 return;
             }
             const preview = onSteamPreview();

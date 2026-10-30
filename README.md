@@ -36,10 +36,13 @@ profile, Theme**.
 
 - **Grab** fills every row with what the profile you're viewing is using.
   Each row also has its own Grab for just that one item.
-- **Apply** shows the filled-in rows on the current profile. You can also
-  paste an item's image or video URL into a row yourself.
+- **Apply** shows the filled-in rows on your own profile. You can also
+  paste an item's image or video URL into a row yourself. On someone else's
+  profile the panel only grabs, and Apply sends to your profile tabs instead
+  (Advanced → *Apply on every profile* changes that).
 - **Peek** (or hold **P**) shows the page's own look for as long as you hold
-  it, so you can compare before and after.
+  it, so you can compare before and after. Press **O** to switch to the
+  page's own look and stay there; press **O** again to come back.
 - **Clear** removes everything you've applied.
 
 A typical flow: grab a background from one profile, open your own profile, and

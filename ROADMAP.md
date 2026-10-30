@@ -50,7 +50,7 @@ Decisions already made with the owner. Work through them in this order.
        presets. One draft, last write wins.
 5. [x] **Bigger ✕ hit area** on slot rows, with clear space between it and
        Grab; clicking near it currently expands the row instead.
-6. [ ] **O key: latched peek.** Toggles between the try-on and the page's
+6. [x] **O key: latched peek.** Toggles between the try-on and the page's
        own look and stays put; P stays press-and-hold; Clear stays
        button-only. The owner isn't sure about this one. Ship it and see;
        the alternative on the table was C for Clear.
