@@ -18,7 +18,7 @@ on your own.
      Tampermonkey's page under `chrome://extensions` (or
      `edge://extensions`). Tampermonkey shows instructions if this is needed.
 2. Open
-   [`steam-profile-previewer.user.js`](https://raw.githubusercontent.com/brunosuzano/steam-profile-previewer/main/steam-profile-previewer.user.js)
+   [`try-on-for-steam-profiles.user.js`](https://raw.githubusercontent.com/brunosuzano/try-on-for-steam-profiles/main/try-on-for-steam-profiles.user.js)
    and click **Install** when Tampermonkey asks.
 
    If you don't see that prompt, open the Tampermonkey dashboard, click **+**

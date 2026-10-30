@@ -10,7 +10,7 @@ Release name: **Try-On for Steam Profiles**, which is also the script's
 
 ## Layout
 
-- `steam-profile-previewer.user.js` — the entire app. One file, no build step,
+- `try-on-for-steam-profiles.user.js` — the entire app. One file, no build step,
   no dependencies. Everything ships in it.
 - `docs/steam-dom-notes.md` — hard-won findings about Steam's DOM and CSS.
   **Read this before changing any selector or geometry.** Every rule in it cost
@@ -72,7 +72,7 @@ any other host means rewriting the privacy policy, so don't.
 No test suite. The gates are:
 
 ```bash
-node --check steam-profile-previewer.user.js   # syntax, always run this
+node --check try-on-for-steam-profiles.user.js   # syntax, always run this
 ```
 
 Node isn't installed on the dev machine. VS Code's bundled Node does the same
@@ -81,7 +81,7 @@ since Code.exe is a GUI binary):
 
 ```powershell
 $env:ELECTRON_RUN_AS_NODE = '1'
-& "C:\Program Files\Microsoft VS Code\Code.exe" --check steam-profile-previewer.user.js
+& "C:\Program Files\Microsoft VS Code\Code.exe" --check try-on-for-steam-profiles.user.js
 ```
 
 ...then install in Tampermonkey and exercise it manually. Detection logic can
@@ -94,7 +94,15 @@ a browser — that's how the slot-type rules were validated.
 script by those two, so changing either installs it as a *separate script with
 empty storage*: two panels on screen, presets gone, and existing users stop
 getting updates. They were fixed in 1.43 (before that, the version sat in
-`@name` too).
+`@name` too). `@namespace` still holds the repo's pre-rename URL
+(`steam-profile-previewer`) on purpose: it's an identifier, not a link.
+
+Updates come from `@downloadURL`/`@updateURL` (the raw file on GitHub's
+`main`), so **pushing to `main` with a higher `@version` is a release**: every
+install picks it up. Don't rename or move the script file, or installs stop
+updating. Presets and settings live in Tampermonkey's storage under the
+`pp*` keys and survive updates; renaming those keys, or changing the stored
+shapes without migrating old ones, would silently lose everyone's data.
 
 A release bumps `@version` **and** `SCRIPT_VERSION` together. The constant is
 what lets a newer panel replace an older one when two copies are installed.

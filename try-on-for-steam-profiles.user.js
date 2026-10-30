@@ -1,12 +1,14 @@
 // ==UserScript==
 // @name         Try-On for Steam Profiles
 // @namespace    https://github.com/brunosuzano/steam-profile-previewer
-// @version      1.45
+// @version      1.46
 // @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
 // @author       Bruno Moreira
 // @license      MIT
-// @homepageURL  https://github.com/brunosuzano/steam-profile-previewer
-// @supportURL   https://github.com/brunosuzano/steam-profile-previewer/issues
+// @homepageURL  https://github.com/brunosuzano/try-on-for-steam-profiles
+// @supportURL   https://github.com/brunosuzano/try-on-for-steam-profiles/issues
+// @downloadURL  https://raw.githubusercontent.com/brunosuzano/try-on-for-steam-profiles/main/try-on-for-steam-profiles.user.js
+// @updateURL    https://raw.githubusercontent.com/brunosuzano/try-on-for-steam-profiles/main/try-on-for-steam-profiles.user.js
 // @icon         data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAALxSURBVFhH7ZdNTxNBGMfLl4C49WBQmK1gjbzNatuIvGpBAnZpbNEgxTa0kIoItJjgQSWgRtuYqCVGYyIXLwY9EY3U+BK5mGjCwZiY+AUkHJoQDuQxz9DZtLttpaW8HJzkl9l5nnnm/+/sbrqj0yW0IkNVuZ7QiCBKX/WiBPmErUloBDUSNXkrEMSaAT2RVtSFeYdIK0Ip9SWpC6U0qJm4xewhdJCJFxJq1It0lSfEui6osgdB6p6AY66pvIBr4Zq4NtcRRBorPFC5X6cnNMyDZSfd8YKbcMQ2nBVYoxZOBWooO0FoWKcX6QIbHDSxCRXyCOwtM2u27F9gTaU8miRm7gtB/chT1ifGUWu9ji7gDizjYF9FM0uSWgcYG5zQd/8d+B5ENwTONTZ0Aal1KiLy9BdwR2PgeR9jvW16QcmhVnwHlnX8FxTXtLJkicUOtN2nEUHO33jBUMcRrMFaXKNh7DkTVtN4dYblUYvrbshAz9QsGEztShFeYyydgbZ7bzXiCMZzMmDqvKS55xhLZ8A68UojjmA8JwPGeofGAMbSGbB4w9D75k+SOI4xnpMBk5xiB+T0O4DUDkbgzMNP4JhZZD2OeS5rA92TLzXPAMYyGchE1gY4G30LkGHvEESv2OHHaCvrcbwpA67br6Fz7AkDr9X5RAN29zj8CrTA76BVAccYz9qAJzwHhxvPKQUcjLlDcykNXO8fSBLnYDxrA+XHZY04x2Du2FoDbf6wRlQNzlEb2NQtKGtyQQltBTnwGCpO9WgE1eAcnIs1WMsftJwfwuqua1BMT4NAJBAIxU+pzOAcIrEarOUimchoYDvYnQYsdX4I+RZTYnV9AGvvNwX1nwznc6gflh85FdRvAaejqeW/gV1lYP2jdGcMrH+URnbMAKERXZF49BAeTLbfAF1Vzol4NNtuA8rRLN4Kqs0XJ+94v2vE823gZ6AFGk8030LNRAOsddju+gcuzC6Nez6u5dvA/GXb2jPv2aUhp92fqPkXEzFyCkNXyhgAAAAASUVORK5CYII=
 // @match        https://steamcommunity.com/*
 // @match        https://store.steampowered.com/points/*
@@ -34,7 +36,7 @@
     // identically to 9.11, the abstraction fits.
     // =================================================================
 
-    const SCRIPT_VERSION = '1.45';
+    const SCRIPT_VERSION = '1.46';
     const STATE_KEY = 'ppApplied';
     const PRESETS_KEY = 'ppPresets';
     const AUTO_KEY = 'ppAuto';
@@ -3725,6 +3727,7 @@
         $('#ppExport').addEventListener('click', async () => {
             if (!presets.length) { setStatus('There are no presets to export.', true); return; }
             const payload = JSON.stringify({
+                // Format tag, not a name: kept as-is so old and new exports match.
                 app: 'steam-profile-previewer',
                 formatVersion: 2,
                 exported: new Date().toISOString(),
