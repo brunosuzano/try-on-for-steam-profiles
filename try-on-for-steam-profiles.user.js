@@ -2387,7 +2387,9 @@
                         style="flex:none; cursor:pointer; padding:2px 6px; font-size:10px; background:transparent;
                         border:1px solid #66c0f4; border-radius:3px; color:#66c0f4;">Grab</button>
                     <span data-slotclear="${slot.id}" title="Clear this slot"
-                        style="flex:none; cursor:pointer; color:#7a8b99; padding:0 3px; font-size:14px;">&times;</span>
+                        style="flex:none; align-self:stretch; display:flex; align-items:center; justify-content:center;
+                        width:26px; margin:-5px -5px -5px 2px; border-left:1px solid #2a475e; border-radius:0 2px 2px 0;
+                        cursor:pointer; color:#7a8b99; font-size:15px; line-height:1;">&times;</span>
                 </div>
                 <div data-slotbody="${slot.id}" style="display:none; padding:0 5px 5px;">
                     ${kindToggle}${fieldGroups}${info}
@@ -2441,6 +2443,9 @@
                 // on the small per-row buttons and blowing them up.
                 '#pp-panel button { font-size: 12px; line-height: normal !important; }',
                 '#pp-panel input[type="checkbox"] { accent-color: #66c0f4; }',
+                // The slot clear is a full-height box at the row's right edge,
+                // so show where it starts: a near miss used to expand the row.
+                '#pp-panel [data-slotclear]:hover { color: #ff6b6b !important; background: #22394d; }',
             ].join('\n');
             (document.head || document.documentElement).appendChild(style);
         }

@@ -48,7 +48,7 @@ Decisions already made with the owner. Work through them in this order.
 4. [x] **Shared draft across tabs.** Grabbed-but-unapplied slot values
        become one draft in storage that every tab shows and updates, like
        presets. One draft, last write wins.
-5. [ ] **Bigger ✕ hit area** on slot rows, with clear space between it and
+5. [x] **Bigger ✕ hit area** on slot rows, with clear space between it and
        Grab; clicking near it currently expands the row instead.
 6. [ ] **O key: latched peek.** Toggles between the try-on and the page's
        own look and stays put; P stays press-and-hold; Clear stays
