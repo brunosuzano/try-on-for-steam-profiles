@@ -66,6 +66,30 @@ own CSS positions it. Restore removes it rather than restoring attributes.
 
 ---
 
+## Whose profile is it
+
+Measured on the five profile fixtures (three own, two other people's). All
+three signals agree on every one:
+
+| Signal | Where | Own | Other |
+|---|---|---|---|
+| `const g_bViewingOwnProfile = 1;` | inline `<script>`, right after `g_rgProfileData` | `1` | `0` |
+| viewer `steamid` vs `g_rgProfileData.steamid` | viewer: `#application_config[data-userinfo]` JSON (or `g_steamID = "…"`) | equal | differ |
+| viewer `accountid` vs header avatar `data-miniprofile` | `.playerAvatar.profile_header_size[data-miniprofile]` | equal | differ |
+
+The userscript is sandboxed, so it can't read `window.g_bViewingOwnProfile`;
+it regexes the inline script text instead. Also present only on your own
+profile: an `a.btn_profile_action[href$="/edit/info"]`, which is a positive
+signal only and isn't used.
+
+**These markers can arrive after boot.** On a `?previewprofile=1` page the
+outer `.no_header` (the page frame) parses before any of them, so a check made
+the moment the panel boots can come back undecided. An undecided result waits
+for `DOMContentLoaded`, and if it's still undecided it fails *open*: a Steam
+rename shouldn't lock people out of their own profile.
+
+---
+
 ## Mini profile
 
 Built on hover and **destroyed and rebuilt on every hover**, so "apply once"

@@ -35,7 +35,7 @@ Decisions already made with the owner. Work through them in this order.
        profile you're inspecting. Fix: add `@noframes`. The bundle grab
        fetches the iframe's URL itself and doesn't need the script running in
        there.
-2. [ ] **Apply only on your own profile.** On anyone else's profile the
+2. [x] **Apply only on your own profile.** On anyone else's profile the
        panel is grab-only, and says so ("Not your profile: grab only").
        Detect the viewer against the profile owner; measure how in
        `fixtures/clean/` (own vs other profiles) before relying on a marker.

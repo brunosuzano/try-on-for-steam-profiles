@@ -46,6 +46,7 @@
     const UI_KEY = 'ppUi';
     const BACKUP_KEY = 'ppEraseBackup';
     const APP_NAMES_KEY = 'ppAppNames';
+    const EVERYWHERE_KEY = 'ppApplyEverywhere';
 
     // ---------------- storage shim ----------------
 
@@ -1507,6 +1508,92 @@
         statusEl.style.color = isError ? '#ff6b6b' : '#8fbc8f';
     }
 
+    // ---------------- whose profile is this ----------------
+    //
+    // Apply paints over the owner's look, which only makes sense on your own
+    // profile; anywhere else the panel is grab-only. Measured against
+    // fixtures/clean/ (three own pages, two other people's): all three
+    // strategies agree on every one. The script is sandboxed, so page globals
+    // are read out of the inline script text rather than off window.
+
+    function inlineScriptText() {
+        return Array.from(document.querySelectorAll('script:not([src])'))
+            .map(s => s.textContent).join('\n');
+    }
+
+    function viewerInfo() {
+        const config = document.getElementById('application_config');
+        let info = {};
+        try { info = JSON.parse((config && config.getAttribute('data-userinfo')) || '{}') || {}; }
+        catch (e) { info = {}; }
+        if (!info.steamid) {
+            const m = /\bg_steamID\s*=\s*"(\d+)"/.exec(inlineScriptText());
+            if (m) info.steamid = m[1];
+        }
+        return info;
+    }
+
+    const OWNERSHIP_STRATEGIES = [
+        {
+            // Steam's own answer, emitted beside g_rgProfileData.
+            name: 'g_bViewingOwnProfile',
+            test() {
+                const m = /\bg_bViewingOwnProfile\s*=\s*(\w+)/.exec(inlineScriptText());
+                return m ? (m[1] === '1' || m[1] === 'true') : null;
+            },
+        },
+        {
+            name: 'viewer steamid vs g_rgProfileData.steamid',
+            test() {
+                const viewer = viewerInfo().steamid;
+                const m = /\bg_rgProfileData\s*=\s*\{[^;]*?"steamid"\s*:\s*"(\d+)"/.exec(inlineScriptText());
+                return (viewer && m) ? String(viewer) === m[1] : null;
+            },
+        },
+        {
+            name: 'viewer accountid vs header avatar data-miniprofile',
+            test() {
+                const viewer = viewerInfo().accountid;
+                const owner = document.querySelector('.playerAvatar.profile_header_size[data-miniprofile]');
+                return (viewer && owner) ? String(viewer) === owner.getAttribute('data-miniprofile') : null;
+            },
+        },
+    ];
+
+    let ownership = { owns: null, via: '' };
+    let applyEverywhere = false;
+
+    function detectOwnership() {
+        if (ownership.owns !== null) return ownership;
+        for (const strategy of OWNERSHIP_STRATEGIES) {
+            let owns = null;
+            try { owns = strategy.test(); } catch (e) { /* try the next one */ }
+            if (owns === null) continue;
+            ownership = { owns, via: strategy.name };
+            console.log('[previewer] own profile: ' + owns + ' (via ' + strategy.name + ')');
+            return ownership;
+        }
+        return ownership;
+    }
+
+    // Boot can fire before the markers have parsed in (on a preview page the
+    // outer .no_header comes first), so an undecided page gets until
+    // DOMContentLoaded before giving up.
+    async function resolveOwnership() {
+        if (detectOwnership().owns === null && document.readyState === 'loading') {
+            await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
+            detectOwnership();
+        }
+        if (ownership.owns === null) console.warn('[previewer] could not tell whose profile this is — allowing Apply');
+        return ownership;
+    }
+
+    // Undecided means detection broke, not that the page is someone else's:
+    // fail open, so a Steam rename can't lock people out of their own profile.
+    function applyHere() {
+        return !ON_STORE && (applyEverywhere || ownership.owns !== false);
+    }
+
     function snapshotPage() {
         if (snapshotTaken) return;
         const owner = document.querySelector('.playerAvatar.profile_header_size[data-miniprofile]')
@@ -1650,7 +1737,7 @@
     }
 
     function reapplyActive(reason) {
-        if (!autoReapply || peeking || !anyActive()) return;
+        if (!autoReapply || peeking || !anyActive() || !applyHere()) return;
         console.log('[previewer] re-applying:', reason);
         for (const slot of SLOTS) {
             const value = slotState[slot.id].active;
@@ -1704,8 +1791,17 @@
         peeking = false;
         snapshotTaken = false;
         failedReapplies = 0;
-        setTimeout(() => { snapshotPage(); reapplyActive('navigation'); }, 300);
+        ownership = { owns: null, via: '' };
+        setTimeout(() => {
+            snapshotPage();
+            detectOwnership();
+            reapplyActive('navigation');
+            if (onApplyModeChange) onApplyModeChange();
+        }, 300);
     }
+
+    // Set by the panel, so a navigation can relabel it for the new page.
+    let onApplyModeChange = null;
 
     function watchForNavigation() {
         let lastUrl = location.href;
@@ -2435,6 +2531,11 @@
                         <input id="ppAuto" type="checkbox" checked> Keep applied while browsing<span
                             id="ppAutoHint" style="display:none; color:#b8873c;"> \u2014 default: on</span>
                     </label>
+                    <label title="Off by default: on other people's profiles the panel only grabs, and Apply sends to your own profile tabs instead."
+                        style="display:block; margin-top:6px; font-size:11px; cursor:pointer; color:#7a8b99;">
+                        <input id="ppEverywhere" type="checkbox"> Apply on every profile<span
+                            id="ppEverywhereHint" style="display:none; color:#b8873c;"> \u2014 default: off</span>
+                    </label>
                     <div style="display:flex; gap:6px; margin-top:6px;">
                         <button id="ppExport" title="Download all presets as a .json file"
                             style="flex:1; padding:4px; cursor:pointer; background:#2a475e;
@@ -2490,6 +2591,8 @@
         const confirmHint = $('#ppConfirmHint');
         const keysInput = $('#ppKeys');
         const keysHint = $('#ppKeysHint');
+        const everywhereInput = $('#ppEverywhere');
+        const everywhereHint = $('#ppEverywhereHint');
         const importFile = $('#ppImportFile');
         const nukeBtn = $('#ppNuke');
         const textOut = $('#ppTextOut');
@@ -2831,6 +2934,12 @@
                     return;
                 }
                 writeSlotFields(slot.id, snap.value);
+                if (!applyHere()) {
+                    refreshSlotRow(slot.id);
+                    setStatus('Grabbed this profile’s ' + slot.label.toLowerCase() +
+                        '. Press Apply to send it to your profile tabs.', false);
+                    return;
+                }
                 if (applySlot(slot.id, snap.value)) {
                     await store.set(STATE_KEY, JSON.stringify(activeSet()));
                     setStatus('Grabbed this page\u2019s ' + slot.label.toLowerCase() + '.', false);
@@ -2945,7 +3054,8 @@
             }
             refreshAllRows();
             setStatus(found
-                ? 'Grabbed ' + found + ' item' + (found === 1 ? '' : 's') + ' from this page. Press Apply to keep.'
+                ? 'Grabbed ' + found + ' item' + (found === 1 ? '' : 's') + ' from this page. Press Apply to ' +
+                    (applyHere() ? 'keep.' : 'send to your profile tabs.')
                 : 'Nothing on this page to grab.', !found);
         });
 
@@ -2994,7 +3104,7 @@
             const ids = Object.keys(values);
             if (!ids.length) { setStatus('Fill in at least one slot first, or press Grab.', true); return; }
 
-            if (ON_STORE) {
+            if (!applyHere()) {
                 for (const id of ids) await storeStage(id, values[id]);
                 refreshAllRows();
                 setStatus('Sent ' + ids.length + ' item' + (ids.length === 1 ? '' : 's') +
@@ -3009,7 +3119,7 @@
         });
 
         $('#ppClear').addEventListener('click', async () => {
-            if (ON_STORE) {
+            if (!applyHere()) {
                 // Without this there's no way to undo a store grab from the
                 // store — it just follows you to your profile tabs.
                 await store.set(STATE_KEY, '');
@@ -3245,6 +3355,73 @@
         function updateKeysHint() { keysHint.style.display = keysInput.checked ? 'none' : ''; }
         function updateConfirmHint() { confirmHint.style.display = confirmInput.checked ? '' : 'none'; }
         function updateAutoHint() { autoHint.style.display = autoInput.checked ? 'none' : ''; }
+        function updateEverywhereHint() { everywhereHint.style.display = everywhereInput.checked ? '' : 'none'; }
+
+        // Peek has nothing to show where nothing can be applied.
+        function setPeekAvailable(available, title) {
+            const peek = $('#ppPeek');
+            peek.disabled = !available;
+            peek.title = title;
+            peek.style.opacity = available ? '' : '0.4';
+            peek.style.cursor = available ? 'pointer' : 'default';
+            peek.style.borderColor = available ? '#66c0f4' : '#2a475e';
+        }
+
+        // Own profile: Apply paints this page. Anyone else's: grab-only, and
+        // Apply sends to your profile tabs the way the Points Shop does.
+        function updateApplyMode() {
+            if (ON_STORE) return;
+            if (applyHere()) {
+                $('#ppApply').title = 'Apply every slot that has URL(s) filled in';
+                $('#ppClear').title = 'Remove everything you’ve applied and put the page back';
+                setPeekAvailable(true, 'Hold to see this page’s own look (or hold P)');
+                return;
+            }
+            $('#ppApply').title = 'Not your profile, so nothing is applied here. Sends the filled slots to your profile tabs.';
+            $('#ppClear').title = 'Clear everything on your profile tabs';
+            setPeekAvailable(false, 'Nothing is applied on someone else’s profile');
+            setStatus('Not your profile: grab only.', false);
+        }
+
+        // Writes the shared applied set into the fields, and applies it too
+        // when this page allows that.
+        async function loadApplied() {
+            const savedRaw = await store.get(STATE_KEY, '');
+            if (!savedRaw) return;
+            try {
+                const saved = JSON.parse(savedRaw) || {};
+                for (const id of Object.keys(saved)) {
+                    if (!SLOT_BY_ID[id]) continue;
+                    writeSlotFields(id, saved[id]);
+                    // The store is capture-only. Most slots fail to apply here
+                    // anyway, but the mini profile "succeeds" (it paints on
+                    // hover), and the stale active value then outranked every
+                    // later grab in its row thumbnail.
+                    if (applyHere()) applySlot(id, saved[id]);
+                }
+            } catch (e) {
+                console.warn('[previewer] could not parse saved state', e);
+            }
+        }
+
+        async function setApplyEverywhere(on, persist) {
+            const before = applyHere();
+            applyEverywhere = on;
+            everywhereInput.checked = on;
+            updateEverywhereHint();
+            if (persist) await store.set(EVERYWHERE_KEY, on ? '1' : '0');
+            if (applyHere() === before) return;
+            // Only this page's paint changes; the shared applied set is
+            // untouched, so your own profile tabs keep it either way.
+            if (applyHere()) await loadApplied();
+            else clearAll(true);
+            refreshAllRows();
+            updateApplyMode();
+            if (applyHere()) setStatus(anyActive() ? 'Applied here too.' : 'Apply now works on this profile.', false);
+        }
+        onApplyModeChange = updateApplyMode;
+
+        everywhereInput.addEventListener('change', () => setApplyEverywhere(everywhereInput.checked, true));
 
         keysInput.addEventListener('change', async () => {
             numberKeys = keysInput.checked;
@@ -3342,7 +3519,7 @@
         async function applyPreset(p) {
             const values = presetValues(p);
 
-            if (ON_STORE) {
+            if (!applyHere()) {
                 // applySlot can't work here, and letting it save an empty
                 // active set would wipe what's applied on the profile tabs.
                 for (const id of Object.keys(values)) {
@@ -3859,6 +4036,7 @@
             await store.set(AUTO_KEY, '1');
             await store.set(CONFIRM_KEY, '0');
             await store.set(KEYS_KEY, '1');
+            await setApplyEverywhere(false, true);
 
             uiState = { left: null, top: null, collapsed: false };
             panel.style.left = 'auto';
@@ -3878,6 +4056,9 @@
                 themeSnapshot: (pageSnapshot.theme && pageSnapshot.theme.value) || null,
                 snapshot: pageSnapshot,
                 applied: activeSet(),
+                ownProfile: ownership.owns,
+                ownProfileVia: ownership.via || '(undecided)',
+                applyEverywhere,
                 slots: {},
             };
             for (const slot of SLOTS) {
@@ -3966,6 +4147,7 @@
             await store.set(AUTO_KEY, autoReapply ? '1' : '0');
             await store.set(CONFIRM_KEY, confirmDelete ? '1' : '0');
             await store.set(KEYS_KEY, numberKeys ? '1' : '0');
+            await setApplyEverywhere(settings.everywhere === true, true);
 
             uiState = Object.assign({ left: null, top: null, collapsed: false }, backup.ui || {});
             applyPosition();
@@ -3978,7 +4160,7 @@
                 await store.set(STATE_KEY, JSON.stringify(backup.applied));
                 for (const id of Object.keys(backup.applied)) {
                     writeSlotFields(id, backup.applied[id]);
-                    if (!ON_STORE) applySlot(id, backup.applied[id]);
+                    if (applyHere()) applySlot(id, backup.applied[id]);
                 }
                 refreshAllRows();
             }
@@ -3993,7 +4175,7 @@
             const backup = {
                 ts: Date.now(),
                 presets,
-                settings: { auto: autoReapply, confirm: confirmDelete, keys: numberKeys },
+                settings: { auto: autoReapply, confirm: confirmDelete, keys: numberKeys, everywhere: applyEverywhere },
                 ui: uiState,
                 applied: activeSet(),
                 fields,
@@ -4013,6 +4195,7 @@
             await store.set(AUTO_KEY, '1');
             await store.set(CONFIRM_KEY, '0');
             await store.set(KEYS_KEY, '1');
+            await setApplyEverywhere(false, true);
 
             uiState = { left: null, top: null, collapsed: false };
             panel.style.left = 'auto';
@@ -4080,23 +4263,12 @@
         applyCollapsed();
         window.addEventListener('resize', applyPosition);
 
-        const savedRaw = await store.get(STATE_KEY, '');
-        if (savedRaw) {
-            try {
-                const saved = JSON.parse(savedRaw) || {};
-                for (const id of Object.keys(saved)) {
-                    if (!SLOT_BY_ID[id]) continue;
-                    writeSlotFields(id, saved[id]);
-                    // The store is capture-only. Most slots fail to apply here
-                    // anyway, but the mini profile "succeeds" (it paints on
-                    // hover), and the stale active value then outranked every
-                    // later grab in its row thumbnail.
-                    if (!ON_STORE) applySlot(id, saved[id]);
-                }
-            } catch (e) {
-                console.warn('[previewer] could not parse saved state', e);
-            }
-        }
+        applyEverywhere = (await store.get(EVERYWHERE_KEY, '0')) === '1';
+        everywhereInput.checked = applyEverywhere;
+        updateEverywhereHint();
+        if (!ON_STORE) await resolveOwnership();
+
+        await loadApplied();
         refreshAllRows();
 
         // ---------------- cross-tab sync ----------------
@@ -4106,8 +4278,8 @@
             let saved = {};
             try { saved = raw ? (JSON.parse(raw) || {}) : {}; } catch (e) { return; }
 
-            if (ON_STORE) {
-                // The store panel's state lives in its fields, not in
+            if (!applyHere()) {
+                // A grab-only panel's state lives in its fields, not in
                 // activeSet() — which is always empty here, so the diff below
                 // would decide nothing had changed and leave stale thumbnails.
                 for (const slot of SLOTS) {
@@ -4165,6 +4337,7 @@
             autoInput.checked = autoReapply;
             updateAutoHint();
         });
+        store.subscribe(EVERYWHERE_KEY, (raw) => { setApplyEverywhere(raw === '1', false); });
 
         // A fresh backup means an erase probably just happened and the page
         // has since reloaded — keep undo reachable.
@@ -4191,16 +4364,12 @@
             $('#ppClear').title = 'Clear everything, here and on your profile tabs';
 
             // There's no profile here to peek at.
-            const peek = $('#ppPeek');
-            peek.disabled = true;
-            peek.title = 'Only available on a profile page';
-            peek.style.opacity = '0.4';
-            peek.style.cursor = 'default';
-            peek.style.borderColor = '#2a475e';
+            setPeekAvailable(false, 'Only available on a profile page');
 
             watchStorePreviews();
             setStatus('Points Shop: open a preview, Grab, then Apply.', false);
         } else {
+            updateApplyMode();
             watchForClobber();
             watchForNavigation();
             watchMiniProfile();
