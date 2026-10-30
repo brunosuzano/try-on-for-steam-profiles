@@ -29,7 +29,7 @@ individually but never end-to-end:
 
 Decisions already made with the owner. Work through them in this order.
 
-1. [ ] **Bug: store Apply repaints the bundle preview.** A Game Profile
+1. [x] **Bug: store Apply repaints the bundle preview.** A Game Profile
        bundle's preview is a steamcommunity.com page in an `<iframe>`, and the
        script runs inside it, so Apply on the store paints your try-on over the
        profile you're inspecting. Fix: add `@noframes`. The bundle grab

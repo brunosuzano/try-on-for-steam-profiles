@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Try-On for Steam Profiles
 // @namespace    https://github.com/brunosuzano/try-on-for-steam-profiles
-// @version      1.46
+// @version      1.47
 // @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
 // @author       Bruno Moreira
 // @license      MIT
@@ -20,6 +20,7 @@
 // @connect      store.steampowered.com
 // @connect      steamcommunity.com
 // @run-at       document-start
+// @noframes
 // ==/UserScript==
 
 (function () {
@@ -36,7 +37,7 @@
     // identically to 9.11, the abstraction fits.
     // =================================================================
 
-    const SCRIPT_VERSION = '1.46';
+    const SCRIPT_VERSION = '1.47';
     const STATE_KEY = 'ppApplied';
     const PRESETS_KEY = 'ppPresets';
     const AUTO_KEY = 'ppAuto';

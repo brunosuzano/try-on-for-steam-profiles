@@ -167,6 +167,12 @@ assets *and* the theme. The mini profile isn't rendered on a profile page, so
 it comes from the dialog's item list, identified by elimination against the
 assets the fetched page supplied — no English labels involved.
 
+**The script must not run inside that iframe** (`@noframes`). It's a
+steamcommunity.com page, so `@match` covers it, and a copy running in there
+picks up the staged try-on through cross-tab sync and paints it over the very
+profile being inspected. The grab fetches the iframe's URL itself and never
+needed a copy inside.
+
 ---
 
 ## Storage
