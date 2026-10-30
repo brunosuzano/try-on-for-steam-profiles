@@ -47,6 +47,7 @@
     const BACKUP_KEY = 'ppEraseBackup';
     const APP_NAMES_KEY = 'ppAppNames';
     const EVERYWHERE_KEY = 'ppApplyEverywhere';
+    const DRAFT_KEY = 'ppDraft';
 
     // ---------------- storage shim ----------------
 
@@ -2741,11 +2742,12 @@
             if (!(KIND_FIELDS[value.kind] || []).length) {
                 slotDrafts[slotId] = value;
                 updateSlotInfo(slotId);
-                return;
+            } else {
+                for (const field of KIND_FIELDS[value.kind]) {
+                    fieldInput(slotId, value.kind, field.key).value = value[field.key] || '';
+                }
             }
-            for (const field of KIND_FIELDS[value.kind]) {
-                fieldInput(slotId, value.kind, field.key).value = value[field.key] || '';
-            }
+            draftChanged();
         }
 
         function clearSlotFields(slotId) {
@@ -2755,6 +2757,7 @@
             for (const kind of slot.kinds) {
                 for (const field of KIND_FIELDS[kind]) fieldInput(slotId, kind, field.key).value = '';
             }
+            draftChanged();
         }
 
         function readAllFields() {
@@ -2764,6 +2767,62 @@
                 if (value) out[slot.id] = value;
             }
             return out;
+        }
+
+        // ---------------- shared draft ----------------
+        //
+        // What's in the fields is one draft shared by every tab, like the
+        // presets: grab on the store, and your profile tab's fields show it
+        // before anything is applied. Last write wins.
+
+        let draftJson = '';
+        let draftTimer = null;
+        let draftFromRemote = false;
+
+        // The fields as typed. readSlotFields normalises and writes back into
+        // the input, which would rewrite a URL mid-keystroke.
+        function rawSlotFields(slotId) {
+            const kind = slotKind(slotId);
+            if (!(KIND_FIELDS[kind] || []).length) return slotDrafts[slotId] || null;
+            const value = { kind };
+            let filled = false;
+            for (const field of KIND_FIELDS[kind]) {
+                value[field.key] = fieldInput(slotId, kind, field.key).value;
+                if (value[field.key].trim()) filled = true;
+            }
+            return filled ? value : null;
+        }
+
+        function draftChanged() {
+            if (draftFromRemote) return;
+            clearTimeout(draftTimer);
+            draftTimer = setTimeout(() => {
+                const draft = {};
+                for (const slot of SLOTS) {
+                    const value = rawSlotFields(slot.id);
+                    if (value) draft[slot.id] = value;
+                }
+                const json = JSON.stringify(draft);
+                if (json === draftJson) return;
+                draftJson = json;
+                store.set(DRAFT_KEY, json);
+            }, 250);
+        }
+
+        function showDraft(raw) {
+            let draft = {};
+            try { draft = raw ? (JSON.parse(raw) || {}) : {}; } catch (e) { return; }
+            draftJson = raw || '';
+            draftFromRemote = true;
+            try {
+                for (const slot of SLOTS) {
+                    if (draft[slot.id]) writeSlotFields(slot.id, draft[slot.id]);
+                    else clearSlotFields(slot.id);
+                }
+            } finally {
+                draftFromRemote = false;
+            }
+            refreshAllRows();
         }
 
         // The #t=0.1 fragment is only a hint — whether the browser seeks and
@@ -2882,10 +2941,9 @@
                 body.style.display = open ? 'none' : '';
                 caret.innerHTML = open ? '&#9656;' : '&#9662;';
             });
-            // Grabs one slot and applies it straight away. Filling the fields
-            // alone wouldn't survive the next page load — and moving between
-            // pages is the whole point of a per-slot grab, since applied state
-            // persists and accumulates while typed fields don't.
+            // Grabs one slot and applies it straight away: a per-slot grab is
+            // for building a look one page at a time, and applied slots
+            // accumulate across pages without a separate Apply each time.
             panel.querySelector(`[data-slotgrab="${slot.id}"]`).addEventListener('click', async (e) => {
                 e.stopPropagation();
                 if (ON_STORE) {
@@ -2968,7 +3026,10 @@
                 refreshSlotRow(slot.id);
             });
             for (const radio of panel.querySelectorAll(`input[name="ppKind_${slot.id}"]`)) {
-                radio.addEventListener('change', () => setSlotKind(slot.id, radio.value));
+                radio.addEventListener('change', () => { setSlotKind(slot.id, radio.value); draftChanged(); });
+            }
+            for (const input of panel.querySelectorAll(`input[data-slot="${slot.id}"]`)) {
+                input.addEventListener('input', draftChanged);
             }
         }
 
@@ -3401,16 +3462,17 @@
             setStatus(preview ? 'Steam preview: grab only.' : 'Not your profile: grab only.', false);
         }
 
-        // Writes the shared applied set into the fields, and applies it too
-        // when this page allows that.
-        async function loadApplied() {
+        // Applies the shared applied set when this page allows that. The
+        // fields belong to the shared draft, so they're only seeded from here
+        // when asked: before any draft exists, or when undoing an erase.
+        async function loadApplied(writeFields) {
             const savedRaw = await store.get(STATE_KEY, '');
             if (!savedRaw) return;
             try {
                 const saved = JSON.parse(savedRaw) || {};
                 for (const id of Object.keys(saved)) {
                     if (!SLOT_BY_ID[id]) continue;
-                    writeSlotFields(id, saved[id]);
+                    if (writeFields) writeSlotFields(id, saved[id]);
                     // The store is capture-only. Most slots fail to apply here
                     // anyway, but the mini profile "succeeds" (it paints on
                     // hover), and the stale active value then outranked every
@@ -3431,7 +3493,7 @@
             if (applyHere() === before) return;
             // Only this page's paint changes; the shared applied set is
             // untouched, so your own profile tabs keep it either way.
-            if (applyHere()) await loadApplied();
+            if (applyHere()) await loadApplied(false);
             else clearAll(true);
             refreshAllRows();
             updateApplyMode();
@@ -4199,8 +4261,12 @@
                     writeSlotFields(id, backup.applied[id]);
                     if (applyHere()) applySlot(id, backup.applied[id]);
                 }
-                refreshAllRows();
             }
+            // The fields as they were, unapplied grabs included.
+            for (const id of Object.keys(backup.fields || {})) {
+                if (SLOT_BY_ID[id] && backup.fields[id]) writeSlotFields(id, backup.fields[id]);
+            }
+            refreshAllRows();
 
             await store.set(BACKUP_KEY, '');
             setStatus('Everything restored.', false);
@@ -4305,7 +4371,11 @@
         updateEverywhereHint();
         if (!ON_STORE) await resolveOwnership();
 
-        await loadApplied();
+        // No draft yet means the first run since drafts were shared, so seed
+        // the fields from what's applied, as they always used to be.
+        const draftRaw = await store.get(DRAFT_KEY, '');
+        await loadApplied(!draftRaw);
+        if (draftRaw) showDraft(draftRaw);
         refreshAllRows();
 
         // ---------------- cross-tab sync ----------------
@@ -4315,18 +4385,10 @@
             let saved = {};
             try { saved = raw ? (JSON.parse(raw) || {}) : {}; } catch (e) { return; }
 
-            if (!applyHere()) {
-                // A grab-only panel's state lives in its fields, not in
-                // activeSet() — which is always empty here, so the diff below
-                // would decide nothing had changed and leave stale thumbnails.
-                for (const slot of SLOTS) {
-                    if (saved[slot.id]) writeSlotFields(slot.id, saved[slot.id]);
-                    else clearSlotFields(slot.id);
-                }
-                refreshAllRows();
-                setStatus('Updated from another tab.', false);
-                return;
-            }
+            // Only what's applied, never the fields: those follow the shared
+            // draft. Writing them here too let an apply in one tab wipe an
+            // unapplied grab sitting in another tab's fields.
+            if (!applyHere()) return;
 
             const current = activeSet();
             const ids = new Set([...Object.keys(current), ...Object.keys(saved)]);
@@ -4334,11 +4396,10 @@
             for (const id of ids) {
                 if (!SLOT_BY_ID[id]) continue;
                 if (!saved[id]) {
-                    if (current[id]) { clearSlot(id, true); clearSlotFields(id); changed = true; }
+                    if (current[id]) { clearSlot(id, true); changed = true; }
                     continue;
                 }
                 if (current[id] && sameValue(current[id], saved[id])) continue;
-                writeSlotFields(id, saved[id]);
                 applySlot(id, saved[id]);
                 changed = true;
             }
@@ -4375,6 +4436,7 @@
             updateAutoHint();
         });
         store.subscribe(EVERYWHERE_KEY, (raw) => { setApplyEverywhere(raw === '1', false); });
+        store.subscribe(DRAFT_KEY, showDraft);
 
         // A fresh backup means an erase probably just happened and the page
         // has since reloaded — keep undo reachable.

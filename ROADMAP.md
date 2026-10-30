@@ -45,7 +45,7 @@ Decisions already made with the owner. Work through them in this order.
 3. [x] **Allow duplicate presets.** Remove the "Already saved as X" block
        entirely; users delete extras by hand. Keep import dedupe (that's
        about not doubling a whole file).
-4. [ ] **Shared draft across tabs.** Grabbed-but-unapplied slot values
+4. [x] **Shared draft across tabs.** Grabbed-but-unapplied slot values
        become one draft in storage that every tab shows and updates, like
        presets. One draft, last write wins.
 5. [ ] **Bigger ✕ hit area** on slot rows, with clear space between it and
