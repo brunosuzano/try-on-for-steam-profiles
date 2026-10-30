@@ -1584,7 +1584,7 @@
             await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
             detectOwnership();
         }
-        if (ownership.owns === null) console.warn('[previewer] could not tell whose profile this is — allowing Apply');
+        if (ownership.owns === null) console.warn('[previewer] could not tell whose profile this is \u2014 allowing Apply');
         return ownership;
     }
 
@@ -2486,9 +2486,7 @@
                 </div>
 
                 <div id="ppPresetHeading" style="font-size:11px; color:#7a8b99; margin-bottom:4px;">Presets</div>
-                <!-- 4.5 rows of 33px plus the border: a half-cut row is what
-                     says "scroll for more". At exactly 4 the list looked complete. -->
-                <div id="ppPresetList" style="max-height:150px; overflow-y:auto; margin-bottom:6px;
+                <div id="ppPresetList" style="max-height:132px; overflow-y:auto; margin-bottom:6px;
                     border:1px solid #2a475e; border-radius:3px;"></div>
                 <div id="ppUndoBar" style="display:none; align-items:center; gap:6px; margin-bottom:6px;
                     padding:4px 6px; border:1px solid #66c0f4; border-radius:3px; background:#22394d; font-size:11px;">
@@ -2947,7 +2945,7 @@
                 writeSlotFields(slot.id, snap.value);
                 if (!applyHere()) {
                     refreshSlotRow(slot.id);
-                    setStatus('Grabbed this profile’s ' + slot.label.toLowerCase() +
+                    setStatus('Grabbed this profile\u2019s ' + slot.label.toLowerCase() +
                         '. Press Apply to send it to your profile tabs.', false);
                     return;
                 }
@@ -3385,8 +3383,8 @@
             if (ON_STORE) return;
             if (applyHere()) {
                 $('#ppApply').title = 'Apply every slot that has URL(s) filled in';
-                $('#ppClear').title = 'Remove everything you’ve applied and put the page back';
-                setPeekAvailable(true, 'Hold to see this page’s own look (or hold P)');
+                $('#ppClear').title = 'Remove everything you\u2019ve applied and put the page back';
+                setPeekAvailable(true, 'Hold to see this page\u2019s own look (or hold P)');
                 return;
             }
             const preview = onSteamPreview();
@@ -3394,8 +3392,8 @@
                 ', so nothing is applied here. Sends the filled slots to your profile tabs.';
             $('#ppClear').title = 'Clear everything on your profile tabs';
             setPeekAvailable(false, preview
-                ? 'Nothing is applied over Steam’s own preview'
-                : 'Nothing is applied on someone else’s profile');
+                ? 'Nothing is applied over Steam\u2019s own preview'
+                : 'Nothing is applied on someone else\u2019s profile');
             setStatus(preview ? 'Steam preview: grab only.' : 'Not your profile: grab only.', false);
         }
 
@@ -3665,9 +3663,11 @@
                 row.title = p.name + ' (' + slotCount + ' item' + (slotCount === 1 ? '' : 's') + ')\n' +
                     applyHint + ' \u00b7 double-click the name to rename';
 
-                if (numberKeys && index < 9) {
+                // Badges are shortcut hints, so they stop at 9. Rows past that
+                // keep an empty one, or their thumbnails sit out of line.
+                if (numberKeys) {
                     const badge = document.createElement('span');
-                    badge.textContent = String(index + 1);
+                    badge.textContent = index < 9 ? String(index + 1) : '';
                     badge.style.cssText = 'flex:none; width:9px; text-align:center; font-size:10px; color:#7a8b99;';
                     row.appendChild(badge);
                 }
@@ -3708,9 +3708,10 @@
                         if (save) {
                             const next = input.value.trim().slice(0, 60) || deriveName(p);
                             if (next !== p.name) {
+                                const previous = p.name;
                                 p.name = next;
                                 await savePresets();
-                                setStatus('Renamed preset ' + (index + 1) + ' to "' + next + '".', false);
+                                setStatus('Renamed "' + previous + '" to "' + next + '".', false);
                             }
                         }
                         renderPresets();
@@ -3845,7 +3846,10 @@
             presetNameInput.value = '';
             renderPresets();
             revealPreset(presets.length - 1);
-            setStatus('Saved "' + candidate.name + '" as preset ' + presets.length + ' (from ' + source + ').', false);
+            // The count rather than a position: past 9, or with number keys
+            // off, there's no number on screen for a position to refer to.
+            setStatus('Saved "' + candidate.name + '" (' + presets.length + ' preset' +
+                (presets.length === 1 ? '' : 's') + ', from ' + source + ').', false);
         });
 
         // ---------------- export / import ----------------
