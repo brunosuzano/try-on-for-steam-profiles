@@ -2443,9 +2443,11 @@
                 // on the small per-row buttons and blowing them up.
                 '#pp-panel button { font-size: 12px; line-height: normal !important; }',
                 '#pp-panel input[type="checkbox"] { accent-color: #66c0f4; }',
-                // The slot clear is a full-height box at the row's right edge,
-                // so show where it starts: a near miss used to expand the row.
-                '#pp-panel [data-slotclear]:hover { color: #ff6b6b !important; background: #22394d; }',
+                // The slot clear and preset delete are full-height boxes at the
+                // row's right edge, so show where they start: a near miss used
+                // to expand the slot row, or apply the preset.
+                '#pp-panel [data-slotclear]:hover, #pp-panel [data-presetdel]:hover' +
+                    ' { color: #ff6b6b !important; background: #22394d !important; }',
             ].join('\n');
             (document.head || document.documentElement).appendChild(style);
         }
@@ -3752,7 +3754,12 @@
                 const del = document.createElement('span');
                 del.textContent = '\u00d7';
                 del.title = 'Delete preset';
-                del.style.cssText = 'flex:none; padding:0 4px; color:#7a8b99; font-size:15px; line-height:1;';
+                del.dataset.presetdel = '';
+                // Full row height at the right edge, like the slot rows' clear:
+                // a near miss here lands on the row and applies the preset.
+                del.style.cssText = 'flex:none; align-self:stretch; display:flex; align-items:center;' +
+                    'justify-content:center; width:26px; margin:-4px -4px -4px 0;' +
+                    'border-left:1px solid #2a475e; color:#7a8b99; font-size:15px; line-height:1;';
 
                 row.appendChild(thumb);
                 row.appendChild(label);
