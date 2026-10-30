@@ -42,7 +42,7 @@ Decisions already made with the owner. Work through them in this order.
        Optional Advanced setting "Apply on every profile", off by default.
        Steam's own item previews (`?previewprofile=1`) are grab-only too,
        even on your own profile ("Steam preview: grab only").
-3. [ ] **Allow duplicate presets.** Remove the "Already saved as X" block
+3. [x] **Allow duplicate presets.** Remove the "Already saved as X" block
        entirely; users delete extras by hand. Keep import dedupe (that's
        about not doubling a whole file).
 4. [ ] **Shared draft across tabs.** Grabbed-but-unapplied slot values

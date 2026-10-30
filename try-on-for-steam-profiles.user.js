@@ -3812,21 +3812,12 @@
                 return;
             }
 
+            // Duplicates are allowed on purpose: saving the same look twice
+            // under two names is a legitimate thing to want, and refusing
+            // read as the Save button being broken. Import still dedupes.
             const candidate = { slots };
-            const dupe = presets.find(existing => samePreset(existing, candidate));
-            if (dupe) {
-                if (mergePreset(dupe, candidate)) {
-                    await savePresets();
-                    renderPresets();
-                    setStatus('Already saved as "' + dupe.name + '" \u2014 added the missing URL(s).', false);
-                } else {
-                    setStatus('Already saved as "' + dupe.name + '".', true);
-                }
-                return;
-            }
-
             candidate.name = presetNameInput.value.trim().slice(0, 60) || deriveName(candidate);
-            candidate.id = Date.now();
+            candidate.id = newPresetId();
             presets.push(candidate);
             await savePresets();
             presetNameInput.value = '';
