@@ -40,6 +40,8 @@ Decisions already made with the owner. Work through them in this order.
        Detect the viewer against the profile owner; measure how in
        `fixtures/clean/` (own vs other profiles) before relying on a marker.
        Optional Advanced setting "Apply on every profile", off by default.
+       Steam's own item previews (`?previewprofile=1`) are grab-only too,
+       even on your own profile ("Steam preview: grab only").
 3. [ ] **Allow duplicate presets.** Remove the "Already saved as X" block
        entirely; users delete extras by hand. Keep import dedupe (that's
        about not doubling a whole file).

@@ -1588,10 +1588,19 @@
         return ownership;
     }
 
+    // Steam's own item preview (?previewprofile=1) is there to show one item
+    // on your profile; painting the try-on over it hides the very thing
+    // being inspected. Grab-only, even though it's your profile.
+    function onSteamPreview() {
+        return new URLSearchParams(location.search).get('previewprofile') === '1';
+    }
+
     // Undecided means detection broke, not that the page is someone else's:
     // fail open, so a Steam rename can't lock people out of their own profile.
     function applyHere() {
-        return !ON_STORE && (applyEverywhere || ownership.owns !== false);
+        if (ON_STORE) return false;
+        if (applyEverywhere) return true;
+        return !onSteamPreview() && ownership.owns !== false;
     }
 
     function snapshotPage() {
@@ -2531,7 +2540,7 @@
                         <input id="ppAuto" type="checkbox" checked> Keep applied while browsing<span
                             id="ppAutoHint" style="display:none; color:#b8873c;"> \u2014 default: on</span>
                     </label>
-                    <label title="Off by default: on other people's profiles the panel only grabs, and Apply sends to your own profile tabs instead."
+                    <label title="Off by default: on other people's profiles and Steam's item previews the panel only grabs, and Apply sends to your own profile tabs instead."
                         style="display:block; margin-top:6px; font-size:11px; cursor:pointer; color:#7a8b99;">
                         <input id="ppEverywhere" type="checkbox"> Apply on every profile<span
                             id="ppEverywhereHint" style="display:none; color:#b8873c;"> \u2014 default: off</span>
@@ -3367,8 +3376,9 @@
             peek.style.borderColor = available ? '#66c0f4' : '#2a475e';
         }
 
-        // Own profile: Apply paints this page. Anyone else's: grab-only, and
-        // Apply sends to your profile tabs the way the Points Shop does.
+        // Own profile: Apply paints this page. Anyone else's, or a Steam item
+        // preview: grab-only, and Apply sends to your profile tabs the way
+        // the Points Shop does.
         function updateApplyMode() {
             if (ON_STORE) return;
             if (applyHere()) {
@@ -3377,10 +3387,14 @@
                 setPeekAvailable(true, 'Hold to see this page’s own look (or hold P)');
                 return;
             }
-            $('#ppApply').title = 'Not your profile, so nothing is applied here. Sends the filled slots to your profile tabs.';
+            const preview = onSteamPreview();
+            $('#ppApply').title = (preview ? 'Steam preview' : 'Not your profile') +
+                ', so nothing is applied here. Sends the filled slots to your profile tabs.';
             $('#ppClear').title = 'Clear everything on your profile tabs';
-            setPeekAvailable(false, 'Nothing is applied on someone else’s profile');
-            setStatus('Not your profile: grab only.', false);
+            setPeekAvailable(false, preview
+                ? 'Nothing is applied over Steam’s own preview'
+                : 'Nothing is applied on someone else’s profile');
+            setStatus(preview ? 'Steam preview: grab only.' : 'Not your profile: grab only.', false);
         }
 
         // Writes the shared applied set into the fields, and applies it too
@@ -4058,6 +4072,7 @@
                 applied: activeSet(),
                 ownProfile: ownership.owns,
                 ownProfileVia: ownership.via || '(undecided)',
+                steamPreview: onSteamPreview(),
                 applyEverywhere,
                 slots: {},
             };

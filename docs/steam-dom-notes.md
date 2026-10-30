@@ -88,6 +88,11 @@ the moment the panel boots can come back undecided. An undecided result waits
 for `DOMContentLoaded`, and if it's still undecided it fails *open*: a Steam
 rename shouldn't lock people out of their own profile.
 
+**A `?previewprofile=1` page is grab-only even though it's yours.** It reports
+`g_bViewingOwnProfile = 1`, but it exists to show one specific item on your
+profile, and applying would paint over exactly that item. It's decided from
+the URL, before ownership.
+
 ---
 
 ## Mini profile
