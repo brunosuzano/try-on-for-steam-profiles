@@ -2677,7 +2677,8 @@
             } catch (e) {
                 saved = {};
             }
-            saved[slotId] = value;
+            if (value) saved[slotId] = value;
+            else delete saved[slotId];
             await store.set(STATE_KEY, JSON.stringify(saved));
         }
 
@@ -2960,7 +2961,10 @@
                 e.stopPropagation();
                 clearSlot(slot.id);
                 clearSlotFields(slot.id);
-                await store.set(STATE_KEY, JSON.stringify(activeSet()));
+                // A grab-only panel has nothing in activeSet(), so saving that
+                // would wipe every slot on your profile tabs, not just this one.
+                if (applyHere()) await store.set(STATE_KEY, JSON.stringify(activeSet()));
+                else await storeStage(slot.id, null);
                 refreshSlotRow(slot.id);
             });
             for (const radio of panel.querySelectorAll(`input[name="ppKind_${slot.id}"]`)) {
