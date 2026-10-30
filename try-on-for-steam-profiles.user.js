@@ -2694,14 +2694,50 @@
                 lines.push('modal sources:\n  ' + (sources.join('\n  ') || 'none'));
             }
             if (modal) {
-                lines.push('modal background-image elements: ' +
-                    modal.querySelectorAll('[style*="background-image"]').length);
+                const bgEls = modal.querySelectorAll('[style*="background-image"]');
+                lines.push('modal background-image elements: ' + bgEls.length);
+                // Whether a background tiles is decided by this styling, not by
+                // its URL, so show it both as Steam wrote it and as it computes.
+                for (const el of bgEls) {
+                    const cs = window.getComputedStyle(el);
+                    const rect = el.getBoundingClientRect();
+                    lines.push('  <' + el.tagName.toLowerCase() + '.' +
+                        (el.className || '').toString().split(' ')[0] + '> ' +
+                        Math.round(rect.width) + 'x' + Math.round(rect.height));
+                    lines.push('    inline style: ' + (el.getAttribute('style') || ''));
+                    lines.push('    computed: size=' + cs.backgroundSize + ' repeat=' + cs.backgroundRepeat +
+                        ' position=' + cs.backgroundPosition + ' attachment=' + cs.backgroundAttachment);
+                }
             }
             lines.push('item media anywhere on page: ' +
                 Array.from(document.querySelectorAll('source, img, video'))
                     .filter(x => ITEM_ASSET.test(x.getAttribute('src') || x.getAttribute('poster') || ''))
                     .length);
             return lines.join('\n');
+        }
+
+        // A tile is a small image repeated; a normal background is a full-size
+        // picture. Only the loaded image can say which, so D waits for it.
+        function imageSize(url) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                const timer = setTimeout(() => resolve('timed out'), 3000);
+                img.onload = () => { clearTimeout(timer); resolve(img.naturalWidth + 'x' + img.naturalHeight); };
+                img.onerror = () => { clearTimeout(timer); resolve('failed to load'); };
+                img.src = url;
+            });
+        }
+
+        async function showStoreDiagnostics() {
+            let report = storeDiagnostics();
+            const modal = storeModal();
+            const urls = modal
+                ? Array.from(modal.querySelectorAll('[style*="background-image"]'))
+                    .map(el => urlFromCssValue(el.getAttribute('style') || '')).filter(Boolean)
+                : [];
+            for (const url of urls) report += '\nimage natural size: ' + (await imageSize(url)) + '  ' + url;
+            console.log('[previewer] store diagnostics\n' + report);
+            showTextFallback('What the panel can see:', report);
         }
 
         // Grabbing on the store writes into the applied set rather than just
@@ -3371,9 +3407,7 @@
                     $('#ppGrab').click();
                 } else if (e.key === 'd' || e.key === 'D') {
                     e.preventDefault();
-                    const report = storeDiagnostics();
-                    console.log('[previewer] store diagnostics\n' + report);
-                    showTextFallback('What the panel can see:', report);
+                    showStoreDiagnostics();
                 }
             }, true);
         }
