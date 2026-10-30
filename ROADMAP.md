@@ -76,6 +76,10 @@ Safari is out of scope — needs a Mac, Xcode, and $99/year.
 ## Stage 3 — publishing
 
 - [x] Repo, licence, README
+- [ ] **Make the repo public.** `@downloadURL`/`@updateURL` point at the raw
+      file on `main`, which 404s while the repo is private, so until then
+      installs can't update themselves (install by pasting the file instead).
+      Going public is what turns updates on.
 - [ ] Privacy policy on GitHub Pages. Six lines: collects nothing, no
       analytics, no servers, presets and URLs stored locally. Network
       requests go to Steam only (`steamcommunity.com`,
