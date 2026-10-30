@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **1.44** (userscript, five slots, feature-complete for
+Current version: **1.46** (userscript, five slots, feature-complete for
 Tampermonkey).
 
 ---
@@ -16,14 +16,49 @@ in decisions that are annoying to revisit.
 Also worth a deliberate regression pass, since fixes were verified
 individually but never end-to-end:
 
-- [ ] Grab each of the five item types from the Points Shop
-- [ ] Grab a whole Game Profile bundle (should fill 5 slots in one press)
-- [ ] Grab from a user profile, and from a frameless profile (should stay empty)
-- [ ] Apply → Peek → Clear on both a static and an animated theme
-- [ ] Presets: save, apply, rename, drag-reorder, number keys
-- [ ] Export → Delete all → Import (should round-trip)
-- [ ] Cross-tab sync, both directions, store ↔ profile
-- [ ] Erase everything → reload → undo
+- [x] Grab each of the five item types from the Points Shop
+- [x] Grab a whole Game Profile bundle (should fill 5 slots in one press)
+- [x] Grab from a user profile, and from a frameless profile (should stay empty)
+- [x] Apply → Peek → Clear on both a static and an animated theme
+- [x] Presets: save, apply, rename, drag-reorder, number keys
+- [x] Export → Delete all → Import (should round-trip)
+- [x] Cross-tab sync, both directions, store ↔ profile
+- [x] Erase everything → reload → undo
+
+### Regression pass findings (October 2026), to fix before the port
+
+Decisions already made with the owner. Work through them in this order.
+
+1. [ ] **Bug: store Apply repaints the bundle preview.** A Game Profile
+       bundle's preview is a steamcommunity.com page in an `<iframe>`, and the
+       script runs inside it, so Apply on the store paints your try-on over the
+       profile you're inspecting. Fix: add `@noframes`. The bundle grab
+       fetches the iframe's URL itself and doesn't need the script running in
+       there.
+2. [ ] **Apply only on your own profile.** On anyone else's profile the
+       panel is grab-only, and says so ("Not your profile: grab only").
+       Detect the viewer against the profile owner; measure how in
+       `fixtures/clean/` (own vs other profiles) before relying on a marker.
+       Optional Advanced setting "Apply on every profile", off by default.
+3. [ ] **Allow duplicate presets.** Remove the "Already saved as X" block
+       entirely; users delete extras by hand. Keep import dedupe (that's
+       about not doubling a whole file).
+4. [ ] **Shared draft across tabs.** Grabbed-but-unapplied slot values
+       become one draft in storage that every tab shows and updates, like
+       presets. One draft, last write wins.
+5. [ ] **Bigger ✕ hit area** on slot rows, with clear space between it and
+       Grab; clicking near it currently expands the row instead.
+6. [ ] **O key: latched peek.** Toggles between the try-on and the page's
+       own look and stays put; P stays press-and-hold; Clear stays
+       button-only. The owner isn't sure about this one. Ship it and see;
+       the alternative on the table was C for Clear.
+7. [ ] **Tiled backgrounds render too zoomed in.** A newer background type.
+       Grab works; display doesn't. Likely cause: the apply path forces
+       `no-repeat` and a full-width `background-size`, while Steam tiles at
+       natural size. **Measure first:** ask the owner for the Points Shop
+       **D** output with a tiled background's preview open, and a saved HTML
+       page of a profile with one equipped (into `fixtures/raw/`, then run
+       the sanitiser). Don't guess at the markup.
 
 ---
 
