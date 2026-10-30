@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <!-- n-panel hand-tuned for 16px: pixel-aligned, no accent circles, three-band strip -->
+  <defs><clipPath id="tile"><rect width="16" height="16" rx="3"/></clipPath></defs>
+  <g clip-path="url(#tile)">
+    <rect width="16" height="16" fill="#1b2838"/>
+    <rect x="1" y="1" width="14" height="16" rx="2" fill="#3a6288"/>
+    <rect x="1" y="11" width="5" height="5" fill="#8f6ad4"/>
+    <rect x="6" y="11" width="4" height="5" fill="#66c0f4"/>
+    <rect x="10" y="11" width="5" height="5" fill="#e0784a"/>
+  </g>
+  <rect x="3" y="2" width="10" height="8" fill="#1b2838"/>
+  <rect x="4" y="3" width="8" height="7" fill="#6a95bf"/>
+  <circle cx="8" cy="5.5" r="1.7" fill="#1b2838"/>
+  <path d="M5 10 C5 8.2 6.4 7.6 8 7.6 C9.6 7.6 11 8.2 11 10 Z" fill="#1b2838"/>
+</svg>

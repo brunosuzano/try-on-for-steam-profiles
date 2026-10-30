@@ -29,15 +29,22 @@ individually but never end-to-end:
 
 ## Before any public release
 
-- [ ] **Confirm the name.** Settled on *Try-On for Steam Profiles*, tagline
+- [x] **Confirm the name.** Settled on *Try-On for Steam Profiles*, tagline
       "Preview backgrounds, avatars, frames and themes before you buy".
-      AMO checked October 2026: no collision. Still to check by hand:
-      Chrome Web Store and Greasy Fork (both block automated search).
+      Checked October 2026 on AMO, Chrome Web Store, Greasy Fork and Edge
+      Add-ons: no collision. Nearest neighbour is "Colorify - Steam
+      Profiles" (Greasy Fork, ~14 installs), which recolours Steam to match
+      a profile's theme. Not a name clash, but adjacent to the
+      colourway-match idea below.
       Avoid "Preview", "Modifier", "Customizer", "Changer": all taken by
       tools in this space (Steam Profile Modifier, SteamProfilePreviewer,
       Steam Profile Changer). Keep "Steam" out of the first word.
-- [ ] **Pick the icon.** Candidates are the swatch-grid and swatch-strip SVGs.
-      Flat, bold, three colours, no thin lines; test at 16px before committing.
+- [x] **Pick the icon.** `icons/n-panel.svg` (avatar, accent picks,
+      colourway strip; redrawn from a Gemini concept) is the master for 32px
+      and up; `icons/n-panel-16.svg` is a pixel-aligned 16px variant without
+      the accent circles. PNG exports: `icon-16/32/48/128.png`, plus
+      `store-icon-128.png` (96px artwork in 16px transparent padding, per
+      Chrome Web Store guidance).
 - [x] **Revert `@name` to a stable string.** Done in 1.43: `@name` is
       "Try-On for Steam Profiles" and `@namespace` is the GitHub repo URL.
       Neither changes again; see "Versioning" in CLAUDE.md.
