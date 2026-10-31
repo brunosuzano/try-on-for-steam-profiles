@@ -54,7 +54,9 @@ Decisions already made with the owner. Work through them in this order.
        own look and stays put; P stays press-and-hold; Clear stays
        button-only. The owner isn't sure about this one. Ship it and see;
        the alternative on the table was C for Clear.
-7. [ ] **Tiled backgrounds render too zoomed in.** A newer background type.
+7. [x] **Tiled backgrounds render too zoomed in.** Fixed from the shop's D
+       output (512×512 tile, `25% auto`, `repeat`); see "Tiled backgrounds"
+       in the DOM notes. Still unverified on a real profile with one equipped. A newer background type.
        Grab works; display doesn't. Likely cause: the apply path forces
        `no-repeat` and a full-width `background-size`, while Steam tiles at
        natural size. **Measure first:** ask the owner for the Points Shop

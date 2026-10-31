@@ -155,6 +155,15 @@
         theme: [],
     };
 
+    // A tiled background carries how Steam sized its tiles, e.g. "25% auto".
+    // It goes into style.setProperty, so only plain lengths get through.
+    const TILE_SIZE = /^[\d.]+(%|px)( (auto|[\d.]+(%|px)))?$/;
+
+    function cleanTile(tile) {
+        const size = tile && typeof tile.size === 'string' ? tile.size.trim() : '';
+        return TILE_SIZE.test(size) ? { size } : null;
+    }
+
     function normalizeValue(value) {
         if (!value || !value.kind) return null;
         if (value.kind === 'theme') {
@@ -167,7 +176,9 @@
         }
         if (value.kind === 'image') {
             const url = normalizeUrl(value.url);
-            return url ? { kind: 'image', url } : null;
+            if (!url) return null;
+            const tile = cleanTile(value.tile);
+            return tile ? { kind: 'image', url, tile } : { kind: 'image', url };
         }
         if (value.kind === 'video') {
             const mp4 = normalizeUrl(value.mp4);
@@ -305,6 +316,23 @@
         }
     }
 
+    // Tiled backgrounds (Points Shop, 2026): Steam repeats the image at less
+    // than the element's width. "repeat" alone proves nothing, since it's the
+    // CSS default, so the tile must also be narrower than the box. Measured on
+    // a 512x512 tile's shop preview: size "25% auto", repeat "repeat", in a
+    // 716px box. Normal profile backgrounds report no-repeat.
+    function tileStyleOf(el) {
+        const cs = window.getComputedStyle(el);
+        if (!cs.backgroundRepeat || /^no-repeat/.test(cs.backgroundRepeat)) return null;
+        const first = (cs.backgroundSize || '').split(/\s+/)[0];
+        const pct = /^([\d.]+)%$/.exec(first);
+        const px = /^([\d.]+)px$/.exec(first);
+        const narrower = pct ? parseFloat(pct[1]) < 100
+            : px ? parseFloat(px[1]) < el.getBoundingClientRect().width
+            : false;
+        return narrower ? cleanTile({ size: cs.backgroundSize }) : null;
+    }
+
     function findByStrategies(strategies, slotId) {
         for (const strategy of strategies) {
             let el = null;
@@ -402,7 +430,11 @@
                     width: Math.round(rect.width), height: Math.round(rect.height),
                     top: Math.round(rect.top), left: Math.round(rect.left),
                 };
-                if (image) snap.value = { kind: 'image', url: image };
+                if (image) {
+                    snap.value = { kind: 'image', url: image };
+                    const tile = tileStyleOf(el);
+                    if (tile) snap.value.tile = tile;
+                }
             }
 
             const themeWrapper = document.querySelector('.profile_animated_background');
@@ -480,10 +512,13 @@
 
                 const themeStyle = (meta && meta.imageStyle) || {};
                 const usableSize = themeStyle.size && themeStyle.size !== 'auto';
-                el.style.setProperty('background-size', usableSize ? themeStyle.size : '100%');
+                // A tile stretched to full width is the "too zoomed in" bug:
+                // repeat it at the size Steam drew it where it was grabbed.
+                const tile = value.tile;
+                el.style.setProperty('background-size', tile ? tile.size : (usableSize ? themeStyle.size : '100%'));
                 el.style.setProperty('background-position', usableSize ? themeStyle.position : '50% 0');
                 el.style.setProperty('background-attachment', themeStyle.attachment || 'scroll');
-                el.style.setProperty('background-repeat', 'no-repeat');
+                el.style.setProperty('background-repeat', tile ? 'repeat' : 'no-repeat');
                 if (themeStyle.origin) el.style.setProperty('background-origin', themeStyle.origin);
                 if (themeStyle.clip) el.style.setProperty('background-clip', themeStyle.clip);
 
@@ -495,7 +530,7 @@
                     return { ok: false, message: 'Applied, but a different image is winning \u2014 CSS conflict.' };
                 }
                 this.probe(state, value, report);
-                return { ok: true, message: 'Background applied.' };
+                return { ok: true, message: tile ? 'Background applied (tiled).' : 'Background applied.' };
             }
 
             return this.applyVideo(state, value, report, false);
@@ -1989,7 +2024,10 @@
         for (const el of root.querySelectorAll('[style*="background-image"]')) {
             const url = urlFromCssValue(el.getAttribute('style') || '');
             if (!inScope(url)) continue;
-            candidates.push({ value: { kind: 'image', url }, el, area: areaOf(el) });
+            const value = { kind: 'image', url };
+            const tile = tileStyleOf(el);
+            if (tile) value.tile = tile;
+            candidates.push({ value, el, area: areaOf(el) });
         }
 
         if (!candidates.length) return null;
@@ -2707,6 +2745,8 @@
                     lines.push('    inline style: ' + (el.getAttribute('style') || ''));
                     lines.push('    computed: size=' + cs.backgroundSize + ' repeat=' + cs.backgroundRepeat +
                         ' position=' + cs.backgroundPosition + ' attachment=' + cs.backgroundAttachment);
+                    const tile = tileStyleOf(el);
+                    lines.push('    tiled: ' + (tile ? 'yes, ' + tile.size : 'no'));
                 }
             }
             lines.push('item media anywhere on page: ' +
@@ -2781,6 +2821,19 @@
         // Apply — the same role the text fields play for the other slots.
         const slotDrafts = {};
 
+        // Nor does a URL field have anywhere to keep a tile's sizing, so it
+        // rides alongside, tied to the URL it came with: edit the URL and it
+        // no longer applies.
+        const slotTiles = {};
+
+        function withTile(slotId, value) {
+            const held = slotTiles[slotId];
+            if (value && value.kind === 'image' && held && held.url === normalizeUrl(value.url)) {
+                value.tile = held.tile;
+            }
+            return value;
+        }
+
         function updateSlotInfo(slotId) {
             const info = panel.querySelector(`[data-slotinfo="${slotId}"]`);
             if (!info) return;
@@ -2806,11 +2859,13 @@
                 value[field.key] = normalizeUrl(fieldInput(slotId, kind, field.key).value);
                 fieldInput(slotId, kind, field.key).value = value[field.key];
             }
-            return normalizeValue(value);
+            return normalizeValue(withTile(slotId, value));
         }
 
         function writeSlotFields(slotId, value) {
             if (!value) return;
+            const tile = value.kind === 'image' ? cleanTile(value.tile) : null;
+            slotTiles[slotId] = tile ? { url: normalizeUrl(value.url), tile } : null;
             setSlotKind(slotId, value.kind);
             if (!(KIND_FIELDS[value.kind] || []).length) {
                 slotDrafts[slotId] = value;
@@ -2825,6 +2880,7 @@
 
         function clearSlotFields(slotId) {
             slotDrafts[slotId] = null;
+            slotTiles[slotId] = null;
             updateSlotInfo(slotId);
             const slot = SLOT_BY_ID[slotId];
             for (const kind of slot.kinds) {
@@ -2863,7 +2919,7 @@
                 value[field.key] = fieldInput(slotId, kind, field.key).value;
                 if (value[field.key].trim()) filled = true;
             }
-            return filled ? value : null;
+            return filled ? withTile(slotId, value) : null;
         }
 
         function draftChanged() {
@@ -4029,7 +4085,9 @@
             const kind = raw.kind || raw.mode;      // 'mode' is the v1 spelling
             if (kind === 'image') {
                 const url = sanitizeMediaUrl(raw.url);
-                return url ? { kind: 'image', url } : null;
+                if (!url) return null;
+                const tile = cleanTile(raw.tile);
+                return tile ? { kind: 'image', url, tile } : { kind: 'image', url };
             }
             if (kind === 'video') {
                 const mp4 = sanitizeMediaUrl(raw.mp4);

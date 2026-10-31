@@ -20,8 +20,23 @@ theme-specific classes like `golden_profile` and `full_width_background`
 trigger broken sizing. But those classes also carry `background-size: 100%`,
 so stripping them makes the image render at natural size. Capture the computed
 `background-size`/`position`/`attachment` *before* stripping and re-apply them
-explicitly. Force `no-repeat` regardless — a tiled profile background is never
-right.
+explicitly. Force `no-repeat`, except for a tiled background (below).
+
+**Tiled backgrounds exist** (a newer item type, e.g. "Pink Quilt", Autumn Sale
+2026). Measured on the Points Shop preview: a **512×512** image, inline style
+only `background-image`, computed `background-size: 25% auto`,
+`background-repeat: repeat`, `position: 50% 50%`, in a 716px-wide box: four
+tiles across. Normal backgrounds on profiles report `no-repeat` with size
+`100%` or `auto` (see `fixtures/clean/diag-profile-*.json`).
+
+So "tiled" is decided structurally: the computed repeat isn't `no-repeat`
+**and** the tile is narrower than the element. `repeat` alone proves nothing,
+since it's the CSS default. The grab records the tile's size from wherever it
+was grabbed, and apply repeats the image at that size instead of stretching
+one tile to full width (the "too zoomed in" bug). **Not yet verified on a real
+profile with one equipped**: if Steam sizes tiles differently there, a grab
+from that profile records its real size, but the shop's `25% auto` is a guess
+at how a profile draws it.
 
 **Video geometry, measured from a live themed page:**
 
