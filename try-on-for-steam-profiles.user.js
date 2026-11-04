@@ -772,7 +772,17 @@
 
             video.load();
             const pr = video.play();
-            if (pr && pr.catch) pr.catch(err => report({ ok: false, message: 'Autoplay blocked: ' + err.name }));
+            if (pr && pr.catch) pr.catch(err => {
+                // AbortError isn't a block: play() was interrupted because
+                // this video was replaced or removed before it started, as
+                // when flicking through presets. Nothing to tell anyone.
+                if (!video.isConnected || (err && err.name === 'AbortError')) {
+                    console.log('[previewer] background video start interrupted', err && err.name);
+                    return;
+                }
+                report({ ok: false, message: 'The browser blocked the background video from playing' +
+                    ' (an autoplay setting), so it may show as a still image.' });
+            });
             return { ok: true };
         },
 
