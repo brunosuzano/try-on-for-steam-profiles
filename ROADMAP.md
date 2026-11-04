@@ -102,8 +102,9 @@ storage shim.
 - [ ] Load unpacked in Chrome and run the regression list above, plus:
       cross-tab sync with no repaint on the writing tab, bundle grab and
       game names through the service worker, Export/Import, clipboard
-- [ ] Pack script: zips an allowlist (manifest, two scripts, icons) into
-      `dist/` and refuses if the three version strings disagree
+- [x] Pack script: `tools/pack-extension.ps1` zips `manifest.json` and
+      exactly the files it references into `dist/`, and refuses if the
+      three version strings disagree, a file is missing, or the tree is dirty
 - [x] Toolbar icon toggles the panel. **Keep the in-page panel** — a popup
       closes the moment you click the page, which destroys the
       flick-between-presets workflow this is built around.

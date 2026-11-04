@@ -30,6 +30,11 @@ Release name: **Try-On for Steam Profiles**, which is also the script's
   SteamID, plus other users' names and SteamIDs. `tools/sanitize-fixtures.js`
   writes placeholder-only copies to `fixtures/clean/`, which is what's
   committed and what tests should read.
+- `tools/pack-extension.ps1` — builds the store zip in `dist/` (ignored):
+  `manifest.json` plus exactly the files it references, nothing else.
+  Refuses if the three version strings disagree, a referenced file is
+  missing, or the tree has uncommitted changes (`-AllowDirty` for a trial).
+  Plain PowerShell, no Node.
 - `tools/sanitize-fixtures.js` — raw → clean fixtures. Refuses to write a file
   if anything personal survives; extend its rules, never hand-edit around it.
 - `archive/steam-bg-swapper.user.js` — the superseded background-only version.
