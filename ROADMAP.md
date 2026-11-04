@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **1.47** (userscript, five slots, feature-complete for
+Current version: **1.48** (userscript, five slots, feature-complete for
 Tampermonkey).
 
 ---
@@ -56,13 +56,10 @@ Decisions already made with the owner. Work through them in this order.
        the alternative on the table was C for Clear.
 7. [x] **Tiled backgrounds render too zoomed in.** Fixed from the shop's D
        output (512×512 tile, `25% auto`, `repeat`); see "Tiled backgrounds"
-       in the DOM notes. Still unverified on a real profile with one equipped. A newer background type.
-       Grab works; display doesn't. Likely cause: the apply path forces
-       `no-repeat` and a full-width `background-size`, while Steam tiles at
-       natural size. **Measure first:** ask the owner for the Points Shop
-       **D** output with a tiled background's preview open, and a saved HTML
-       page of a profile with one equipped (into `fixtures/raw/`, then run
-       the sanitiser). Don't guess at the markup.
+       in the DOM notes. Still unverified on a real profile with one
+       equipped: if it looks wrong there, get a saved HTML page of that
+       profile (into `fixtures/raw/`, then run the sanitiser) before
+       changing anything.
 
 ---
 
@@ -115,10 +112,9 @@ Safari is out of scope — needs a Mac, Xcode, and $99/year.
 ## Stage 3 — publishing
 
 - [x] Repo, licence, README
-- [ ] **Make the repo public.** `@downloadURL`/`@updateURL` point at the raw
-      file on `main`, which 404s while the repo is private, so until then
-      installs can't update themselves (install by pasting the file instead).
-      Going public is what turns updates on.
+- [x] **Make the repo public.** `@downloadURL`/`@updateURL` point at the raw
+      file on `main`, so installs now update themselves: pushing a higher
+      `@version` to `main` is a release.
 - [ ] Privacy policy on GitHub Pages. Six lines: collects nothing, no
       analytics, no servers, presets and URLs stored locally. Network
       requests go to Steam only (`steamcommunity.com`,

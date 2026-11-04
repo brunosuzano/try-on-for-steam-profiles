@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Try-On for Steam Profiles
 // @namespace    https://github.com/brunosuzano/try-on-for-steam-profiles
-// @version      1.47
+// @version      1.48
 // @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
 // @author       Bruno Moreira
 // @license      MIT
@@ -37,7 +37,7 @@
     // identically to 9.11, the abstraction fits.
     // =================================================================
 
-    const SCRIPT_VERSION = '1.47';
+    const SCRIPT_VERSION = '1.48';
     const STATE_KEY = 'ppApplied';
     const PRESETS_KEY = 'ppPresets';
     const AUTO_KEY = 'ppAuto';
@@ -49,7 +49,12 @@
     const EVERYWHERE_KEY = 'ppApplyEverywhere';
     const DRAFT_KEY = 'ppDraft';
 
-    // ---------------- storage shim ----------------
+    // ---------------- platform ----------------
+    //
+    // Everything that differs between the userscript (Tampermonkey's GM_*)
+    // and the extension (chrome.*) lives in this section: storage, requests
+    // to Steam's other origin, and the clipboard. The rest of the file runs
+    // unchanged in both, so a fix is made once.
 
     const store = {
         async get(key, fallback = '') {
@@ -100,6 +105,45 @@
             }
         },
     };
+
+    // GM_xmlhttpRequest rather than fetch: the store API and the bundle
+    // preview are cross-origin from wherever we're running, and neither is
+    // reliably CORS-friendly. Resolves '' on any failure.
+    function requestText(url, timeout = 10000) {
+        return new Promise((resolve) => {
+            if (typeof GM_xmlhttpRequest === 'undefined') {
+                fetch(url, { credentials: 'omit' })
+                    .then(res => res.text()).then(resolve).catch(() => resolve(''));
+                return;
+            }
+            GM_xmlhttpRequest({
+                method: 'GET', url,
+                onload: (res) => resolve(res.responseText || ''),
+                onerror: () => resolve(''),
+                ontimeout: () => resolve(''),
+                timeout,
+            });
+        });
+    }
+
+    async function requestJson(url) {
+        try { return JSON.parse(await requestText(url, 8000)); } catch (e) { return null; }
+    }
+
+    async function writeClipboard(text) {
+        if (typeof GM_setClipboard !== 'undefined') { GM_setClipboard(text, 'text'); return; }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+            return;
+        }
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed; opacity:0; pointer-events:none;';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+    }
 
     // ---------------- url helpers ----------------
 
@@ -1362,28 +1406,6 @@
         ];
     }
 
-    // GM_xmlhttpRequest rather than fetch: this is cross-origin from
-    // steamcommunity.com, and the store API isn't reliably CORS-friendly.
-    function requestJson(url) {
-        return new Promise((resolve) => {
-            if (typeof GM_xmlhttpRequest === 'undefined') {
-                fetch(url, { credentials: 'omit' })
-                    .then(res => res.json()).then(resolve).catch(() => resolve(null));
-                return;
-            }
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url,
-                onload: (res) => {
-                    try { resolve(JSON.parse(res.responseText)); } catch (e) { resolve(null); }
-                },
-                onerror: () => resolve(null),
-                ontimeout: () => resolve(null),
-                timeout: 8000,
-            });
-        });
-    }
-
     async function resolveAppName(appid) {
         if (!appid) return '';
         if (appNames[appid] !== undefined) return appNames[appid];
@@ -2040,23 +2062,6 @@
             title: '',
             mediaEl: best.el,
         };
-    }
-
-    function requestText(url) {
-        return new Promise((resolve) => {
-            if (typeof GM_xmlhttpRequest === 'undefined') {
-                fetch(url, { credentials: 'omit' })
-                    .then(res => res.text()).then(resolve).catch(() => resolve(''));
-                return;
-            }
-            GM_xmlhttpRequest({
-                method: 'GET', url,
-                onload: (res) => resolve(res.responseText || ''),
-                onerror: () => resolve(''),
-                ontimeout: () => resolve(''),
-                timeout: 10000,
-            });
-        });
     }
 
     function firstSrcset(el) {
@@ -3176,21 +3181,6 @@
             textOut.style.display = 'none';
             textOutArea.value = '';
         });
-
-        async function writeClipboard(text) {
-            if (typeof GM_setClipboard !== 'undefined') { GM_setClipboard(text, 'text'); return; }
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                await navigator.clipboard.writeText(text);
-                return;
-            }
-            const ta = document.createElement('textarea');
-            ta.value = text;
-            ta.style.cssText = 'position:fixed; opacity:0; pointer-events:none;';
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            ta.remove();
-        }
 
         // ---------------- grab / copy / apply / clear / peek ----------------
 
