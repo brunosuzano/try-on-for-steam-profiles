@@ -130,6 +130,14 @@ original" and permanently breaks Clear.
 Nameplates carry **no poster attribute**, so a thumbnail has to pull a frame
 out of the clip itself.
 
+**To grab it, fetch it; don't simulate the hover.** Steam's hover loads
+`/miniprofile/<accountid>?origin=…`, and fetching that same URL takes ~5ms.
+A simulated `mouseover`/`mouseenter` on the `[data-miniprofile]` element
+builds the popup from Tampermonkey, but **never does from an extension
+content script** (measured November 2026: times out every time). Trying the
+hover first made every Grab all wait out its 1.5s timeout. It's now only a
+fallback for when the fetch fails.
+
 ---
 
 ## Themes

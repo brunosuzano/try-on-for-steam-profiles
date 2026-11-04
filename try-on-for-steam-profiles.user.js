@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Try-On for Steam Profiles
 // @namespace    https://github.com/brunosuzano/try-on-for-steam-profiles
-// @version      1.49
+// @version      1.50
 // @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
 // @author       Bruno Moreira
 // @license      MIT
@@ -37,7 +37,7 @@
     // identically to 9.11, the abstraction fits.
     // =================================================================
 
-    const SCRIPT_VERSION = '1.49';
+    const SCRIPT_VERSION = '1.50';
     const STATE_KEY = 'ppApplied';
     const PRESETS_KEY = 'ppPresets';
     const AUTO_KEY = 'ppAuto';
@@ -1186,12 +1186,17 @@
             return { value: nameplateValueFrom(container), meta: {} };
         },
 
-        // Make the popup exist without the user having to hover first:
-        // simulate the hover, and fall back to fetching it.
+        // Get the mini profile without the user having to hover first. Fetch
+        // it the way Steam's own hover does (~5ms), and only then simulate
+        // the hover. In the extension the simulated hover never builds the
+        // popup, so trying it first cost every Grab all its full 1.5s timeout.
         async ensure() {
             if (this.find()) return null;
-            if (await forceMiniProfileHover(1500)) return null;
-            return await fetchMiniProfileValue();
+            const fetched = await fetchMiniProfileValue();
+            if (fetched) return fetched;
+            console.log('[previewer] mini profile fetch failed, simulating a hover');
+            await forceMiniProfileHover(1500);
+            return null;
         },
 
         apply(state, value) {
