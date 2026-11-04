@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Try-On for Steam Profiles
 // @namespace    https://github.com/brunosuzano/try-on-for-steam-profiles
-// @version      1.51
+// @version      1.52
 // @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
 // @author       Bruno Moreira
 // @license      MIT
@@ -37,7 +37,7 @@
     // identically to 9.11, the abstraction fits.
     // =================================================================
 
-    const SCRIPT_VERSION = '1.51';
+    const SCRIPT_VERSION = '1.52';
     const STATE_KEY = 'ppApplied';
     const PRESETS_KEY = 'ppPresets';
     const AUTO_KEY = 'ppAuto';
@@ -49,6 +49,7 @@
     const EVERYWHERE_KEY = 'ppApplyEverywhere';
     const DRAFT_KEY = 'ppDraft';
     const WRITE_TAG_KEY = 'ppWriteTag';     // extension only; see store.subscribe
+    const HIDDEN_KEY = 'ppHidden';          // extension only: the toolbar button
 
     // ---------------- platform ----------------
     //
@@ -172,6 +173,30 @@
         ta.select();
         document.execCommand('copy');
         ta.remove();
+    }
+
+    // The toolbar button (extension only). background.js forwards each click
+    // here, and the panel says what a click does once it exists. Until then,
+    // or on a Steam page with no panel, the reply says so and the button
+    // shows it rather than doing nothing.
+    let toolbarHandler = null;
+    function onToolbarClick(handler) { toolbarHandler = handler; }
+
+    if (HAS_EXTENSION_RUNTIME) {
+        chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+            if (!msg || msg.type !== 'togglePanel') return false;
+            if (!toolbarHandler) { sendResponse({ ok: false }); return false; }
+            Promise.resolve(toolbarHandler())
+                .then(hidden => sendResponse({ ok: true, hidden }))
+                .catch(() => sendResponse({ ok: false }));
+            return true;
+        });
+    }
+
+    // Lets the toolbar button show "off" on tabs where the panel is hidden.
+    function reportPanelHidden(hidden) {
+        if (!HAS_EXTENSION_RUNTIME) return;
+        chrome.runtime.sendMessage({ type: 'panelState', hidden }).catch(() => {});
     }
 
     // ---------------- url helpers ----------------
@@ -2730,6 +2755,9 @@
                 </div>
             </div>
         `;
+        // Read before the panel goes in, or a hidden panel flashes on load.
+        let panelHidden = HAS_EXTENSION_RUNTIME && (await store.get(HIDDEN_KEY, '0')) === '1';
+        panel.style.display = panelHidden ? 'none' : '';
         document.body.appendChild(panel);
 
         const $ = sel => panel.querySelector(sel);
@@ -4598,6 +4626,22 @@
         });
         store.subscribe(EVERYWHERE_KEY, (raw) => { setApplyEverywhere(raw === '1', false); });
         store.subscribe(DRAFT_KEY, showDraft);
+
+        // Hidden is only out of sight: the try-on stays painted, and the
+        // keys (presets, P/O peek, G on the shop) keep working, so you can
+        // flick between looks with nothing in the way. Shared by every tab.
+        function applyHidden() {
+            panel.style.display = panelHidden ? 'none' : '';
+            reportPanelHidden(panelHidden);
+        }
+        onToolbarClick(async () => {
+            panelHidden = !panelHidden;
+            applyHidden();
+            await store.set(HIDDEN_KEY, panelHidden ? '1' : '0');
+            return panelHidden;
+        });
+        store.subscribe(HIDDEN_KEY, (raw) => { panelHidden = raw === '1'; applyHidden(); });
+        if (panelHidden) reportPanelHidden(true);
 
         // A fresh backup means an erase probably just happened and the page
         // has since reloaded — keep undo reachable.

@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **1.51** (userscript, five slots, feature-complete for
+Current version: **1.52** (userscript, five slots, feature-complete for
 Tampermonkey).
 
 ---
@@ -104,7 +104,7 @@ storage shim.
       game names through the service worker, Export/Import, clipboard
 - [ ] Pack script: zips an allowlist (manifest, two scripts, icons) into
       `dist/` and refuses if the three version strings disagree
-- [ ] Toolbar icon toggles the panel. **Keep the in-page panel** — a popup
+- [x] Toolbar icon toggles the panel. **Keep the in-page panel** — a popup
       closes the moment you click the page, which destroys the
       flick-between-presets workflow this is built around.
 - [ ] "Report broken" button: prefilled GitHub issue carrying the page URL,
