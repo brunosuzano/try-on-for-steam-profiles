@@ -435,7 +435,10 @@
                 return el;
             }
         }
-        console.warn('[previewer] no strategy matched for slot:', slotId);
+        // A log, not a warning: a profile with no frame or no background is
+        // normal, and Chrome lists every content-script warning on the
+        // extension's Errors page, where it reads as a fault.
+        console.log('[previewer] no strategy matched for slot:', slotId);
         return null;
     }
 
@@ -2600,7 +2603,7 @@
         const existing = document.getElementById('pp-panel');
         if (existing) {
             if (!isNewerThan(SCRIPT_VERSION, existing.dataset.ppVersion)) return;
-            console.warn('[previewer] replacing panel from older version', existing.dataset.ppVersion);
+            console.log('[previewer] replacing panel from older version', existing.dataset.ppVersion);
             existing.remove();
         }
 

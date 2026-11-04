@@ -109,6 +109,11 @@ under "Inspect views", where `await chrome.storage.local.get(null)` shows the
 stored state. The extension's storage is separate from Tampermonkey's: move
 presets with Export → Import.
 
+Chrome lists every content-script `console.warn` and `console.error` on the
+extension's **Errors** page, where users and store reviewers read them as
+faults. Use `console.log` for expected outcomes (a slot with nothing on the
+page); keep `warn` for real failures, which in practice means catch blocks.
+
 Detection logic can
 be checked against `fixtures/clean/` with a throwaway Python/Node script rather than
 a browser — that's how the slot-type rules were validated.
