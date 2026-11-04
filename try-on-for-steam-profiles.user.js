@@ -257,7 +257,7 @@
 
     function urlProblem(url) {
         if (!/^https?:\/\//i.test(url)) {
-            return 'That doesn\u2019t look like a URL \u2014 it should start with https://';
+            return 'That doesn\u2019t look like a web address. It should start with https://';
         }
         return null;
     }
@@ -332,7 +332,7 @@
         for (const [label, candidate] of [['mp4', value.mp4], ['webm', value.webm]]) {
             if (!candidate) continue;
             const problem = urlProblem(candidate);
-            if (problem) return label + ' \u2014 ' + problem;
+            if (problem) return 'The .' + label + ' link: ' + problem.charAt(0).toLowerCase() + problem.slice(1);
             if (looksLikeImage(candidate)) {
                 return 'The ' + label + ' URL looks like an image \u2014 use Image for stills.';
             }
@@ -483,11 +483,12 @@
 
     const BASE_CLASS = 'no_header profile_page has_profile_background';
 
+    // MediaError codes: what the console gets, and what the user reads.
     const MEDIA_ERRORS = {
-        1: 'ABORTED (1) \u2014 load cancelled',
-        2: 'NETWORK (2) \u2014 URL unreachable / blocked',
-        3: 'DECODE (3) \u2014 file corrupt or unsupported encoding',
-        4: 'SRC_NOT_SUPPORTED (4) \u2014 bad URL or codec the browser refuses',
+        1: ['ABORTED', 'The background video stopped loading. Try applying it again.'],
+        2: ['NETWORK', 'The background video couldn\u2019t be downloaded. Check your connection, or the link.'],
+        3: ['DECODE', 'The background video file is damaged, or in a format the browser can\u2019t play.'],
+        4: ['SRC_NOT_SUPPORTED', 'The background video didn\u2019t load. Check the link: the browser can\u2019t play what it points to.'],
     };
 
     const backgroundSlot = {
@@ -625,7 +626,7 @@
 
         apply(state, value, meta, report) {
             const el = this.find();
-            if (!el) return { ok: false, message: 'Couldn\u2019t find the profile background on this page.' };
+            if (!el) return { ok: false, message: 'Couldn\u2019t find this profile\u2019s background area. Steam may have changed its page layout.' };
 
             state.targetEl = el;
             this.capture(state, el);
@@ -655,10 +656,10 @@
 
                 const applied = urlFromCssValue(window.getComputedStyle(el).backgroundImage);
                 if (!applied) {
-                    return { ok: false, message: 'Applied, but the element shows no background image.' };
+                    return { ok: false, message: 'The background didn\u2019t take: the page still shows no image. Reload the page and try again.' };
                 }
                 if (applied.split('/').pop() !== value.url.split('/').pop()) {
-                    return { ok: false, message: 'Applied, but a different image is winning \u2014 CSS conflict.' };
+                    return { ok: false, message: 'The page\u2019s own background is still showing over this one. Reload the page and try again.' };
                 }
                 this.probe(state, value, report);
                 return { ok: true };
@@ -745,7 +746,9 @@
                     return;
                 }
                 const code = video.error ? video.error.code : 0;
-                report({ ok: false, message: 'Video error: ' + (MEDIA_ERRORS[code] || 'unknown') });
+                const known = MEDIA_ERRORS[code];
+                console.log('[previewer] background video error', code, known ? known[0] : 'unknown');
+                report({ ok: false, message: known ? known[1] : 'The background video couldn\u2019t play.' });
             });
 
             if (value.webm) {
@@ -767,7 +770,7 @@
 
             const rect = wrapper.getBoundingClientRect();
             if (!wrapper.isConnected || rect.width < 1 || rect.height < 1) {
-                return { ok: false, message: 'Video container has no size \u2014 page CSS may be interfering.' };
+                return { ok: false, message: 'Couldn\u2019t make room for the background video on this page. Reload the page and try again.' };
             }
 
             video.load();
@@ -1565,7 +1568,7 @@
 
         apply(state, value) {
             const body = document.body;
-            if (!body) return { ok: false, message: 'No page body to theme.' };
+            if (!body) return { ok: false, message: 'The page hasn\u2019t finished loading. Wait a moment and try again.' };
 
             if (!state.original) {
                 const inline = {};
@@ -1865,7 +1868,7 @@
         try { result = slot.apply(state, value, meta, report); }
         catch (e) {
             console.warn('[previewer] apply failed for', slotId, e);
-            setStatus(slot.label + ': something went wrong applying that.', true);
+            setStatus(slot.label + ' couldn\u2019t be applied. Reload the page and try again.', true);
             return false;
         }
 
@@ -1987,7 +1990,8 @@
                 if (failedReapplies >= 3) {
                     if (autoReapply) {
                         autoReapply = false;
-                        setStatus('The page keeps resetting things \u2014 auto-reapply paused.', true);
+                        setStatus('Steam keeps undoing the try-on on this page, so re-applying it is paused' +
+                            ' until you reload. Apply still works.', true);
                     }
                     return;
                 }
@@ -3476,7 +3480,8 @@
                             '). Press Apply to send them to your profile tabs.', false);
                         return;
                     }
-                    setStatus('Couldn\u2019t read the full preview \u2014 falling back to the item list.', true);
+                    setStatus('Couldn\u2019t load the full preview, so this grab used the item list:' +
+                        ' images may be smaller.', true);
                 }
 
                 if (preview.bundle) {
