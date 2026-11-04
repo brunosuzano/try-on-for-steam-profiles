@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Try-On for Steam Profiles
 // @namespace    https://github.com/brunosuzano/try-on-for-steam-profiles
-// @version      1.54
+// @version      1.55
 // @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
 // @author       Bruno Moreira
 // @license      MIT
@@ -37,7 +37,7 @@
     // identically to 9.11, the abstraction fits.
     // =================================================================
 
-    const SCRIPT_VERSION = '1.54';
+    const SCRIPT_VERSION = '1.55';
     const STATE_KEY = 'ppApplied';
     const PRESETS_KEY = 'ppPresets';
     const AUTO_KEY = 'ppAuto';
@@ -201,7 +201,6 @@
 
     // ---------------- url helpers ----------------
 
-    const STEAM_CDN = /(^|\.)steamstatic\.com$|(^|\.)akamaihd\.net$|(^|\.)steamcommunity\.com$/i;
 
     function urlFromCssValue(value) {
         const m = /url\(\s*["']?(.*?)["']?\s*\)/.exec(value || '');
@@ -226,10 +225,6 @@
             return 'That doesn\u2019t look like a URL \u2014 it should start with https://';
         }
         return null;
-    }
-
-    function isSteamCdn(url) {
-        try { return STEAM_CDN.test(new URL(url).hostname); } catch (e) { return false; }
     }
 
     function looksLikeVideo(url) { return /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url); }
@@ -628,7 +623,7 @@
                     return { ok: false, message: 'Applied, but a different image is winning \u2014 CSS conflict.' };
                 }
                 this.probe(state, value, report);
-                return { ok: true, message: tile ? 'Background applied (tiled).' : 'Background applied.' };
+                return { ok: true };
             }
 
             return this.applyVideo(state, value, report, false);
@@ -645,7 +640,7 @@
                     const retry = new Image();
                     retry.onload = () => {
                         if (!current()) return;
-                        report({ ok: true, message: 'Loaded it over https:// instead.', reapply: { kind: 'image', url: secure } });
+                        report({ ok: true, reapply: { kind: 'image', url: secure } });
                     };
                     retry.onerror = () => {
                         if (!current()) return;
@@ -655,10 +650,6 @@
                     return;
                 }
                 report({ ok: false, message: 'That URL didn\u2019t load as an image \u2014 check the link.' });
-            };
-            probe.onload = () => {
-                if (!current()) return;
-                if (!isSteamCdn(url)) report({ ok: true, message: 'Background applied (not a Steam CDN link).' });
             };
             probe.src = url;
         },
@@ -705,14 +696,9 @@
                 }
                 console.log('[previewer] video natural size:', video.videoWidth + 'x' + video.videoHeight);
             });
-            video.addEventListener('playing', () => {
-                const fromSteam = isSteamCdn(value.mp4 || '') || isSteamCdn(value.webm || '');
-                report({ ok: true, message: fromSteam ? 'Video playing.' : 'Video playing (not a Steam CDN link).' });
-            });
             video.addEventListener('error', () => {
                 const usesHttp = /^http:\/\//i.test(value.mp4 || '') || /^http:\/\//i.test(value.webm || '');
                 if (usesHttp && !httpsRetried) {
-                    report({ ok: true, message: 'Retrying over https\u2026' });
                     this.removeInjected();
                     this.applyVideo(state, {
                         kind: 'video',
@@ -749,7 +735,7 @@
             video.load();
             const pr = video.play();
             if (pr && pr.catch) pr.catch(err => report({ ok: false, message: 'Autoplay blocked: ' + err.name }));
-            return { ok: true, message: 'Loading video\u2026' };
+            return { ok: true };
         },
 
         verify(state, value) {
@@ -954,7 +940,6 @@
             const targets = this.ensureTargets(state);
             if (!targets) return { ok: false, message: this.missingMessage };
             for (const el of targets) setImageSources(el, value.url);
-            const el = state.targetEl;
 
             // Report a load failure rather than leaving a broken image.
             const probe = new Image();
@@ -964,11 +949,7 @@
             };
             probe.src = value.url;
 
-            const extra = targets.length - 1;
-            return {
-                ok: true,
-                message: this.label + ' applied' + (extra > 0 ? ' in ' + targets.length + ' places.' : '.'),
-            };
+            return { ok: true };
         },
 
         verify(state, value) {
@@ -1226,13 +1207,8 @@
 
         apply(state, value) {
             state.active = value;   // paintMiniProfile reads this
-            const painted = paintMiniProfile();
-            return {
-                ok: true,
-                message: painted
-                    ? 'Mini profile applied.'
-                    : 'Mini profile saved \u2014 it will show next time you hover your name.',
-            };
+            paintMiniProfile();
+            return { ok: true };
         },
 
         // Nothing rendered means nothing to have been clobbered. Without
@@ -1562,7 +1538,7 @@
             }
 
             state.targetEl = body;
-            return { ok: true, message: 'Theme applied: ' + (value.label || value.bodyClass) + '.' };
+            return { ok: true };
         },
 
         verify(state, value) {
@@ -1789,10 +1765,14 @@
         const state = slotState[slotId];
         const meta = (pageSnapshot[slotId] && pageSnapshot[slotId].meta) || {};
 
-        // Async outcomes (media events, load probes) report back here.
+        // Async outcomes (media events, load probes) report back here. Only
+        // failures reach the status line: this also runs on page load,
+        // auto-reapply and cross-tab sync, where a success message describes
+        // nothing the user did, and a late one ("video playing") overwrote
+        // the message about what they did. Success is the caller's to say.
         const report = (result) => {
             if (result.reapply) { applySlot(slotId, result.reapply); return; }
-            setStatus(result.message, !result.ok);
+            if (!result.ok) setStatus(result.message, true);
         };
 
         let result;
@@ -1808,7 +1788,6 @@
             return false;
         }
         state.active = value;
-        setStatus(result.message, false);
         return true;
     }
 
@@ -1841,7 +1820,7 @@
             try { state.peek = slot.peekOut(state); }
             catch (e) { console.warn('[previewer] peekOut failed for', slot.id, e); }
         }
-        setStatus('Peeking at this page\u2019s own look\u2026', false);
+        // No message: while P is held, the page itself is the feedback.
     }
 
     function peekEnd() {
@@ -1854,9 +1833,11 @@
             state.peek = null;
         }
         peeking = false;
+        const wasLatched = peekLatched;
         peekLatched = false;
         if (onPeekChange) onPeekChange();
-        setStatus('Back to your version.', false);
+        // Take down "press O to go back" once it no longer applies.
+        if (wasLatched) setStatus('', false);
     }
 
     // What releasing P or the Peek button does: a held peek ends, a latched
@@ -3456,7 +3437,11 @@
             for (const id of ids) if (applySlot(id, values[id])) applied++;
             await store.set(STATE_KEY, JSON.stringify(activeSet()));
             refreshAllRows();
-            if (applied > 1) setStatus('Applied ' + applied + ' items.', false);
+            // A failure has already said so; don't paint over it.
+            if (applied === ids.length) {
+                setStatus(applied === 1 ? SLOT_BY_ID[ids[0]].label + ' applied.'
+                    : 'Applied ' + applied + ' items.', false);
+            }
         });
 
         $('#ppClear').addEventListener('click', async () => {
@@ -3906,14 +3891,17 @@
             }
 
             let applied = 0;
+            let wanted = 0;
             for (const slot of SLOTS) {
                 if (!values[slot.id]) continue;
+                wanted++;
                 writeSlotFields(slot.id, values[slot.id]);
                 if (applySlot(slot.id, values[slot.id])) applied++;
             }
             await store.set(STATE_KEY, JSON.stringify(activeSet()));
             refreshAllRows();
-            if (applied > 1) setStatus('Applied "' + p.name + '".', false);
+            // A failure has already said so; don't paint over it.
+            if (applied && applied === wanted) setStatus('Applied "' + p.name + '".', false);
         }
 
         const thumbObserver = new IntersectionObserver((entries, obs) => {
@@ -4175,7 +4163,6 @@
                     presets.splice(target, 0, moved);
                     await savePresets();
                     renderPresets();
-                    setStatus('Preset moved.', false);
                 });
 
                 row.addEventListener('click', () => { applyPreset(p); });
@@ -4796,7 +4783,6 @@
             setPeekAvailable(false, 'Only available on a profile page');
 
             watchStorePreviews();
-            setStatus('Points Shop: open a preview, Grab, then Apply.', false);
         } else {
             updateApplyMode();
             watchForClobber();
