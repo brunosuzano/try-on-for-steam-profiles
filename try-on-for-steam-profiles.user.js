@@ -2647,7 +2647,7 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.5); width: 320px;
         `;
         panel.innerHTML = `
-            <div id="ppHeader" title="Drag to move"
+            <div id="ppHeader" title="Drag to move, double-click to put it back in the corner"
                 style="display:flex; align-items:center; gap:6px; margin-bottom:8px; cursor:move; user-select:none;">
                 <span style="flex:none; width:14px;"></span>
                 <div style="flex:1; font-weight:bold; text-align:center; font-size:13px;">Try-On for Steam Profiles</div>
@@ -3562,11 +3562,12 @@
         $('#ppHeader').addEventListener('mousedown', (e) => {
             if (e.target === collapseBtn) return;
             const rect = panel.getBoundingClientRect();
-            panelDrag = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+            panelDrag = { dx: e.clientX - rect.left, dy: e.clientY - rect.top, moved: false };
             e.preventDefault();
         });
         document.addEventListener('mousemove', (e) => {
             if (!panelDrag) return;
+            panelDrag.moved = true;
             const [left, top] = clampToViewport(e.clientX - panelDrag.dx, e.clientY - panelDrag.dy);
             panel.style.left = left + 'px';
             panel.style.top = top + 'px';
@@ -3574,10 +3575,24 @@
         });
         document.addEventListener('mouseup', async () => {
             if (!panelDrag) return;
+            // A click that didn't move anything mustn't pin the panel where
+            // it is: in the default corner it's anchored to the right edge,
+            // and a pinned copy stops following window resizes.
+            const moved = panelDrag.moved;
             panelDrag = null;
+            if (!moved) return;
             const rect = panel.getBoundingClientRect();
             uiState.left = rect.left;
             uiState.top = rect.top;
+            await saveUiState();
+        });
+        // Back to the default top-right corner.
+        $('#ppHeader').addEventListener('dblclick', async (e) => {
+            if (e.target === collapseBtn) return;
+            if (uiState.left === null && uiState.top === null) return;
+            uiState.left = null;
+            uiState.top = null;
+            placePanel();
             await saveUiState();
         });
 
