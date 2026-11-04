@@ -228,6 +228,19 @@ the shim's fallback order as it is.
 `GM_addValueChangeListener` needs its own `@grant`, and reports whether a
 change came from another tab — that's what drives cross-tab sync.
 
+`chrome.storage.onChanged` has no such flag: it also reports the tab's own
+writes. So each write also sets `ppWriteTag` to `<page-load id>:<counter>` in
+the **same** `set()` call, which makes both arrive in one change event, and a
+subscriber skips events carrying its own id. The counter matters: a key whose
+value didn't change is left out of the event, so a repeated tag would vanish.
+Matching on the value instead fails when a write doesn't change anything:
+no event fires, and the remembered value later swallows a real remote write.
+
+**Content scripts are bound by the page's CORS** (Chrome 85+), unlike
+`GM_xmlhttpRequest`. The store API from a community page, and the bundle
+preview from the store, go through `background.js`, which sends cookies as
+GM does by default; the bundle preview is a page of the user's own profile.
+
 ---
 
 ## Things ruled out, so nobody retries them

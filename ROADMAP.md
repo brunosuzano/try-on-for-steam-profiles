@@ -92,10 +92,18 @@ Decisions already made with the owner. Work through them in this order.
 Small, because everything site-specific is behind the slot registry and the
 storage shim.
 
-- [ ] MV3 skeleton: `manifest.json`, `storage` permission, the two host
-      matches, icons at 16/48/128
-- [ ] Swap the storage shim's backend to `chrome.storage.local` (async —
-      already accounted for; call sites await)
+- [x] MV3 skeleton: `manifest.json`, `storage` permission, the two host
+      matches, icons at 16/32/48/128. The content script is the userscript
+      file itself. Written and statically checked; not yet loaded in Chrome.
+- [x] Storage shim on `chrome.storage.local`, with a write tag so a tab
+      doesn't react to its own writes (`onChanged` has no "remote" flag)
+- [x] Cross-origin requests through `background.js`: content scripts are
+      bound by the page's CORS, which `GM_xmlhttpRequest` never was
+- [ ] Load unpacked in Chrome and run the regression list above, plus:
+      cross-tab sync with no repaint on the writing tab, bundle grab and
+      game names through the service worker, Export/Import, clipboard
+- [ ] Pack script: zips an allowlist (manifest, two scripts, icons) into
+      `dist/` and refuses if the three version strings disagree
 - [ ] Toolbar icon toggles the panel. **Keep the in-page panel** — a popup
       closes the moment you click the page, which destroys the
       flick-between-presets workflow this is built around.

@@ -48,19 +48,28 @@
     const APP_NAMES_KEY = 'ppAppNames';
     const EVERYWHERE_KEY = 'ppApplyEverywhere';
     const DRAFT_KEY = 'ppDraft';
+    const WRITE_TAG_KEY = 'ppWriteTag';     // extension only; see store.subscribe
 
     // ---------------- platform ----------------
     //
     // Everything that differs between the userscript (Tampermonkey's GM_*)
     // and the extension (chrome.*) lives in this section: storage, requests
     // to Steam's other origin, and the clipboard. The rest of the file runs
-    // unchanged in both, so a fix is made once.
+    // unchanged in both, so a fix is made once. The extension loads this
+    // same file as its content script; see manifest.json.
+
+    const HAS_CHROME_STORAGE = typeof chrome !== 'undefined' && !!chrome.storage && !!chrome.storage.local;
+    const HAS_EXTENSION_RUNTIME = typeof chrome !== 'undefined' && !!chrome.runtime && !!chrome.runtime.id;
+
+    // Identifies this page load's writes, so its own subscribers can skip them.
+    const INSTANCE_ID = Math.random().toString(36).slice(2);
+    let writeSeq = 0;
 
     const store = {
         async get(key, fallback = '') {
             try {
                 if (typeof GM_getValue !== 'undefined') return GM_getValue(key, fallback);
-                if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                if (HAS_CHROME_STORAGE) {
                     const res = await chrome.storage.local.get(key);
                     return (key in res) ? res[key] : fallback;
                 }
@@ -74,8 +83,14 @@
         async set(key, value) {
             try {
                 if (typeof GM_setValue !== 'undefined') return GM_setValue(key, value);
-                if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-                    return chrome.storage.local.set({ [key]: value });
+                if (HAS_CHROME_STORAGE) {
+                    // One set() is one onChanged event, so the tag arrives
+                    // with the value it labels. The counter makes every tag
+                    // new: an unchanged tag would be left out of the event.
+                    return chrome.storage.local.set({
+                        [key]: value,
+                        [WRITE_TAG_KEY]: INSTANCE_ID + ':' + (++writeSeq),
+                    });
                 }
                 localStorage.setItem(key, value);
             } catch (e) {
@@ -90,9 +105,15 @@
                     });
                     return;
                 }
-                if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+                // Unlike GM's listener, onChanged has no "remote" flag: it
+                // also reports this page's own writes, which would re-run the
+                // cross-tab handlers on the tab that just made the change.
+                // The write tag says who wrote it.
+                if (HAS_CHROME_STORAGE && chrome.storage.onChanged) {
                     chrome.storage.onChanged.addListener((changes, area) => {
                         if (area !== 'local' || !(key in changes)) return;
+                        const tag = changes[WRITE_TAG_KEY];
+                        if (tag && String(tag.newValue).startsWith(INSTANCE_ID + ':')) return;
                         callback(changes[key].newValue);
                     });
                     return;
@@ -108,21 +129,29 @@
 
     // GM_xmlhttpRequest rather than fetch: the store API and the bundle
     // preview are cross-origin from wherever we're running, and neither is
-    // reliably CORS-friendly. Resolves '' on any failure.
+    // reliably CORS-friendly. An extension's content script is bound by the
+    // page's CORS too, so there the request goes to background.js, which
+    // isn't. Resolves '' on any failure.
     function requestText(url, timeout = 10000) {
         return new Promise((resolve) => {
-            if (typeof GM_xmlhttpRequest === 'undefined') {
-                fetch(url, { credentials: 'omit' })
-                    .then(res => res.text()).then(resolve).catch(() => resolve(''));
+            if (typeof GM_xmlhttpRequest !== 'undefined') {
+                GM_xmlhttpRequest({
+                    method: 'GET', url,
+                    onload: (res) => resolve(res.responseText || ''),
+                    onerror: () => resolve(''),
+                    ontimeout: () => resolve(''),
+                    timeout,
+                });
                 return;
             }
-            GM_xmlhttpRequest({
-                method: 'GET', url,
-                onload: (res) => resolve(res.responseText || ''),
-                onerror: () => resolve(''),
-                ontimeout: () => resolve(''),
-                timeout,
-            });
+            if (HAS_EXTENSION_RUNTIME) {
+                chrome.runtime.sendMessage({ type: 'fetchText', url, timeout })
+                    .then(res => resolve((res && res.text) || ''))
+                    .catch(() => resolve(''));
+                return;
+            }
+            fetch(url, { credentials: 'omit' })
+                .then(res => res.text()).then(resolve).catch(() => resolve(''));
         });
     }
 

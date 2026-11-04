@@ -1,6 +1,7 @@
 # Try-On for Steam Profiles
 
-A Tampermonkey userscript that previews Steam profile cosmetics — background,
+A Tampermonkey userscript, and an MV3 browser extension built from the same
+file, that previews Steam profile cosmetics — background,
 avatar frame, avatar, mini profile, theme — **without owning or equipping
 them**. Built to answer "which theme's colourway suits this background?"
 before spending Points.
@@ -11,7 +12,13 @@ Release name: **Try-On for Steam Profiles**, which is also the script's
 ## Layout
 
 - `try-on-for-steam-profiles.user.js` — the entire app. One file, no build step,
-  no dependencies. Everything ships in it.
+  no dependencies. Everything ships in it. The extension loads this exact file
+  as its content script, so **one fix lands in both**; anything that differs
+  between them lives in its "platform" section and nowhere else.
+- `manifest.json`, `background.js` — the extension around it. It sits at the
+  repo root because Chrome only loads files inside the extension's folder and
+  the script can't move (see Versioning). `background.js` only does what a
+  content script can't: requests to Steam's other origin.
 - `docs/steam-dom-notes.md` — hard-won findings about Steam's DOM and CSS.
   **Read this before changing any selector or geometry.** Every rule in it cost
   several wrong attempts.
@@ -38,7 +45,8 @@ sync, undo, erase — loops over `SLOTS` and knows nothing about what a
 **preset** is `{name, slots: {...}}` holding any subset, which is what lets one
 preset be a whole look and another be a single background. Storage goes through
 a shim (`store.get/set/subscribe`) that wraps `GM_*`, `chrome.storage.local`
-and `localStorage`, so the eventual extension port is a backend swap.
+and `localStorage`; requests and the clipboard have the same kind of wrapper.
+Those three are the whole difference between the userscript and the extension.
 
 ## Rules that matter
 
@@ -84,7 +92,19 @@ $env:ELECTRON_RUN_AS_NODE = '1'
 & "C:\Program Files\Microsoft VS Code\Code.exe" --check try-on-for-steam-profiles.user.js
 ```
 
-...then install in Tampermonkey and exercise it manually. Detection logic can
+...then install in Tampermonkey and exercise it manually.
+
+For the extension: disable the userscript in Tampermonkey first (with equal
+versions, whichever panel loads first wins). In `chrome://extensions`, turn on
+Developer mode, **Load unpacked**, pick the repo root. After each edit, press
+reload on the extension's card *and* reload the Steam tab: open tabs keep the
+old content script. Content-script logs are in the page's console (pick the
+extension in the context dropdown); the service worker has its own console
+under "Inspect views", where `await chrome.storage.local.get(null)` shows the
+stored state. The extension's storage is separate from Tampermonkey's: move
+presets with Export → Import.
+
+Detection logic can
 be checked against `fixtures/clean/` with a throwaway Python/Node script rather than
 a browser — that's how the slot-type rules were validated.
 
@@ -105,5 +125,7 @@ updating. Presets and settings live in Tampermonkey's storage under the
 `pp*` keys and survive updates; renaming those keys, or changing the stored
 shapes without migrating old ones, would silently lose everyone's data.
 
-A release bumps `@version` **and** `SCRIPT_VERSION` together. The constant is
-what lets a newer panel replace an older one when two copies are installed.
+A release bumps `@version` **and** `SCRIPT_VERSION` together, and `version` in
+`manifest.json` with them. The constant is what lets a newer panel replace an
+older one when two copies are installed (the userscript and the extension
+count as two).
