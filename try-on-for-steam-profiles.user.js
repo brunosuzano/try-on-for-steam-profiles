@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Try-On for Steam Profiles
 // @namespace    https://github.com/brunosuzano/try-on-for-steam-profiles
-// @version      1.48
+// @version      1.49
 // @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
 // @author       Bruno Moreira
 // @license      MIT
@@ -37,7 +37,7 @@
     // identically to 9.11, the abstraction fits.
     // =================================================================
 
-    const SCRIPT_VERSION = '1.48';
+    const SCRIPT_VERSION = '1.49';
     const STATE_KEY = 'ppApplied';
     const PRESETS_KEY = 'ppPresets';
     const AUTO_KEY = 'ppAuto';
@@ -2559,11 +2559,6 @@
                         border:1px solid #66c0f4; border-radius:3px; color:#c7d5e0;">
                         Grab all from this page
                     </button>
-                    <button id="ppCopy" title="Copy the URL(s) of this page's own look (not the one you've applied)"
-                        style="flex:none; padding:5px 10px; cursor:pointer; background:#2a475e;
-                        border:1px solid #2a475e; border-radius:3px; color:#c7d5e0;">
-                        Copy
-                    </button>
                 </div>
 
                 <div id="ppPresetHeading" style="font-size:11px; color:#7a8b99; margin-bottom:4px;">Presets</div>
@@ -3250,46 +3245,6 @@
                 ? 'Grabbed ' + found + ' item' + (found === 1 ? '' : 's') + ' from this page. Press Apply to ' +
                     (applyHere() ? 'keep.' : 'send to your profile tabs.')
                 : 'Nothing on this page to grab.', !found);
-        });
-
-        $('#ppCopy').addEventListener('click', async () => {
-            if (ON_STORE) {
-                const preview = storePreviewValue();
-                if (!preview) { setStatus('Open an item\u2019s preview first.', true); return; }
-                const v = preview.value;
-                const urls = v.kind === 'image' ? [v.url] : [v.mp4, v.webm, v.poster].filter(Boolean);
-                const text = urls.join('\n');
-                try {
-                    await writeClipboard(text);
-                    setStatus('Copied ' + urls.length + ' URL' + (urls.length === 1 ? '' : 's') + '.', false);
-                } catch (e) {
-                    setStatus('Clipboard blocked \u2014 the URL(s) are below.', true);
-                    showTextFallback('Previewed item URL(s):', text);
-                }
-                return;
-            }
-
-            for (const slot of SLOTS) await refreshVolatileSnapshot(slot.id);
-            const lines = [];
-            for (const slot of SLOTS) {
-                const value = pageSnapshot[slot.id] && pageSnapshot[slot.id].value;
-                if (!value) continue;
-                if (value.kind === 'image') lines.push(value.url);
-                else {
-                    if (value.mp4) lines.push(value.mp4);
-                    if (value.webm) lines.push(value.webm);
-                    if (value.poster) lines.push(value.poster);
-                }
-            }
-            if (!lines.length) { setStatus('This page has nothing of its own to copy.', true); return; }
-            const text = lines.join('\n');
-            try {
-                await writeClipboard(text);
-                setStatus('Copied ' + lines.length + ' URL' + (lines.length === 1 ? '' : 's') + ' from this page.', false);
-            } catch (e) {
-                setStatus('Clipboard blocked \u2014 the URL(s) are below.', true);
-                showTextFallback('This page\u2019s own URL(s):', text);
-            }
         });
 
         $('#ppApply').addEventListener('click', async () => {
@@ -4595,7 +4550,6 @@
             // Nothing here to apply to, so don't offer to.
             $('#ppGrab').textContent = 'Grab previewed item';
             $('#ppGrab').title = 'Grab whatever item preview is open (or press G)';
-            $('#ppCopy').title = 'Copy the URL(s) of the open item preview';
             $('#ppApply').title = 'Send the filled slots to your profile tabs';
             $('#ppClear').title = 'Clear everything, here and on your profile tabs';
 
