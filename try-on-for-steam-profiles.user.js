@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Try-On for Steam Profiles
 // @namespace    https://github.com/brunosuzano/try-on-for-steam-profiles
-// @version      1.53
+// @version      1.54
 // @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
 // @author       Bruno Moreira
 // @license      MIT
@@ -37,7 +37,7 @@
     // identically to 9.11, the abstraction fits.
     // =================================================================
 
-    const SCRIPT_VERSION = '1.53';
+    const SCRIPT_VERSION = '1.54';
     const STATE_KEY = 'ppApplied';
     const PRESETS_KEY = 'ppPresets';
     const AUTO_KEY = 'ppAuto';
@@ -1624,7 +1624,7 @@
         console.log('[previewer]', message);
         if (!statusEl) return;
         statusEl.textContent = message;
-        statusEl.style.color = isError ? '#ff6b6b' : '#8fbc8f';
+        statusEl.classList.toggle('pp-error', !!isError);
     }
 
     // ---------------- whose profile is this ----------------
@@ -2518,7 +2518,7 @@
         return SLOTS.map(slot => {
             const kindToggle = slot.kinds.length > 1
                 ? `<div style="margin-bottom:6px; font-size:11px;">` +
-                  slot.kinds.map((kind, i) => `<label style="margin-right:10px; cursor:pointer;">
+                  slot.kinds.map((kind, i) => `<label>
                       <input type="radio" name="ppKind_${slot.id}" value="${kind}"${i === 0 ? ' checked' : ''}>
                       ${kind === 'image' ? 'Image' : 'Video'}
                   </label>`).join('') + `</div>`
@@ -2527,8 +2527,7 @@
             const fieldGroups = slot.kinds.map((kind, i) => {
                 const inputs = KIND_FIELDS[kind].map(field =>
                     `<input data-slot="${slot.id}" data-kind="${kind}" data-field="${field.key}"
-                        type="text" placeholder="${field.placeholder}"
-                        style="width:100%; box-sizing:border-box; margin-bottom:6px; padding:4px;">`
+                        type="text" placeholder="${field.placeholder}">`
                 ).join('');
                 return `<div data-fields="${slot.id}" data-kind="${kind}"
                     style="display:${i === 0 ? '' : 'none'};">${inputs}</div>`;
@@ -2536,29 +2535,23 @@
 
             // Kinds with no editable fields (the theme) show what's held instead.
             const info = slot.kinds.some(kind => !(KIND_FIELDS[kind] || []).length)
-                ? `<div data-slotinfo="${slot.id}" style="font-size:11px; color:#7a8b99;">
+                ? `<div data-slotinfo="${slot.id}" class="pp-muted">
                        Nothing grabbed yet \u2014 press Grab on a page using the theme you want.
                    </div>`
                 : '';
 
             return `
-            <div data-slotrow="${slot.id}" style="border:1px solid #2a475e; border-radius:3px; margin-bottom:6px;">
-                <div data-slothead="${slot.id}" title="Click to show this slot's URLs"
-                    style="display:flex; align-items:center; gap:6px; padding:5px; cursor:pointer; user-select:none;">
-                    <span data-slotcaret="${slot.id}" style="flex:none; font-size:10px; color:#7a8b99;">&#9656;</span>
-                    <div data-slotthumb="${slot.id}" style="width:32px; height:20px; flex:none; border-radius:2px;
-                        background:#0e1620; overflow:hidden; display:flex; align-items:center; justify-content:center;"></div>
-                    <div style="flex:1; min-width:0; font-size:11px;">${slot.label}</div>
-                    <span data-slotstate="${slot.id}" style="flex:none; font-size:10px; color:#7a8b99;">none</span>
-                    <button data-slotgrab="${slot.id}" title="Grab just this page's ${slot.label.toLowerCase()} and apply it"
-                        style="flex:none; cursor:pointer; padding:2px 6px; font-size:10px; background:transparent;
-                        border:1px solid #66c0f4; border-radius:3px; color:#66c0f4;">Grab</button>
-                    <span data-slotclear="${slot.id}" title="Clear this slot"
-                        style="flex:none; align-self:stretch; display:flex; align-items:center; justify-content:center;
-                        width:26px; margin:-5px -5px -5px 2px; border-left:1px solid #2a475e; border-radius:0 2px 2px 0;
-                        cursor:pointer; color:#7a8b99; font-size:15px; line-height:1;">&times;</span>
+            <div data-slotrow="${slot.id}" class="pp-slot">
+                <div data-slothead="${slot.id}" class="pp-slothead" title="Click to show this slot's URLs">
+                    <span data-slotcaret="${slot.id}" class="pp-caret">&#9656;</span>
+                    <div data-slotthumb="${slot.id}" class="pp-thumb"></div>
+                    <div class="pp-slotname">${slot.label}<span
+                        data-slotstate="${slot.id}" class="pp-slotstate">Empty</span></div>
+                    <button data-slotgrab="${slot.id}" class="pp-ghost"
+                        title="Grab just this page's ${slot.label.toLowerCase()} and apply it">Grab</button>
+                    <span data-slotclear="${slot.id}" class="pp-x" title="Clear this slot">&times;</span>
                 </div>
-                <div data-slotbody="${slot.id}" style="display:none; padding:0 5px 5px;">
+                <div data-slotbody="${slot.id}" class="pp-slotbody" style="display:none;">
                     ${kindToggle}${fieldGroups}${info}
                 </div>
             </div>`;
@@ -2598,31 +2591,154 @@
         if (!document.getElementById('pp-style')) {
             const style = document.createElement('style');
             style.id = 'pp-style';
+            // The look sits on top of the very thing being judged, so it stays
+            // quiet: Steam's blues, a mostly opaque glass, no colour of its
+            // own beyond the accent. Muted text is #9aa9b6, not Steam's
+            // #7a8b99, which misses 4.5:1 contrast on this background.
+            // "Motiva Sans" is Steam's own font, already loaded by its pages;
+            // naming it costs no request.
             style.textContent = [
-                '#pp-panel, #pp-panel * { font-family: Arial, Helvetica, sans-serif !important;',
+                '#pp-panel, #pp-panel * { font-family: "Motiva Sans", Arial, Helvetica, sans-serif !important;',
                 '  box-sizing: border-box; letter-spacing: normal !important;',
                 '  text-transform: none !important; }',
-                '#pp-panel input[type="text"] { font-size: 12px !important;',
-                '  color: #c7d5e0 !important; background: #0e1620 !important;',
-                '  border: 1px solid #2a475e !important; border-radius: 2px; }',
-                '#pp-panel input[type="text"]::placeholder { color: #7a8b99; font-style: italic; }',
-                // No !important on the size: it was overriding the inline 10px
-                // on the small per-row buttons and blowing them up.
-                '#pp-panel button { font-size: 12px; line-height: normal !important; }',
-                '#pp-panel input[type="checkbox"] { accent-color: #66c0f4; }',
+                '#pp-panel { background: rgba(22, 32, 45, 0.9); color: #dfe8ef; font-size: 12px;',
+                '  -webkit-backdrop-filter: blur(14px) saturate(140%); backdrop-filter: blur(14px) saturate(140%);',
+                '  border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px;',
+                '  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 16px 40px rgba(0, 0, 0, 0.45),',
+                '    0 2px 8px rgba(0, 0, 0, 0.3); }',
+                '#pp-panel input[type="text"] { font-size: 12px !important; height: 28px; padding: 0 8px;',
+                '  color: #dfe8ef !important; background: rgba(0, 0, 0, 0.25) !important;',
+                '  border: 1px solid rgba(255, 255, 255, 0.08) !important; border-radius: 6px; outline: none; }',
+                '#pp-panel input[type="text"]:focus { border-color: rgba(102, 192, 244, 0.6) !important; }',
+                '#pp-panel input[type="text"]::placeholder { color: #9aa9b6; font-style: normal; }',
+                '#pp-panel input.pp-rename { width: 100%; height: 22px; padding: 0 6px; }',
+                '#pp-panel input[type="checkbox"], #pp-panel input[type="radio"] { accent-color: #66c0f4; }',
+                '#pp-panel button:focus-visible, #pp-panel [tabindex]:focus-visible' +
+                    ' { outline: 2px solid #66c0f4; outline-offset: 1px; }',
+                '#pp-panel ::-webkit-scrollbar { width: 8px; }',
+                '#pp-panel ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 4px; }',
+
+                // Header. The short title only shows when collapsed.
+                '#ppHeader { display: flex; align-items: center; gap: 8px; margin: -2px 0 12px;' +
+                    ' cursor: move; user-select: none; }',
+                '#ppHeader .pp-title { flex: 1; font-size: 13px; font-weight: 600; color: #fff; white-space: nowrap; }',
+                '#ppHeader .pp-title-short { display: none; }',
+                '#ppCollapse { flex: none; display: flex; align-items: center; justify-content: center;' +
+                    ' width: 22px; height: 22px; border-radius: 6px; cursor: pointer; font-size: 10px;' +
+                    ' color: #c4d2dd; background: rgba(255, 255, 255, 0.06); }',
+                '#ppCollapse:hover { background: rgba(255, 255, 255, 0.14); }',
+
+                // Buttons: one shape, four weights.
+                '#pp-panel .pp-btn { height: 30px; padding: 0 12px; cursor: pointer; font-size: 12px;' +
+                    ' font-weight: 600; line-height: normal !important; color: #dfe8ef;' +
+                    ' background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.08);' +
+                    ' border-radius: 8px; transition: background 0.12s, border-color 0.12s; }',
+                '#pp-panel .pp-btn:hover { background: rgba(255, 255, 255, 0.13); }',
+                '#pp-panel .pp-btn:disabled { opacity: 0.4; cursor: default; }',
+                '#pp-panel .pp-btn:disabled:hover { background: rgba(255, 255, 255, 0.07); }',
+                '#pp-panel .pp-btn-primary, #pp-panel .pp-btn.pp-latched { color: #0f1b27; font-weight: 700;' +
+                    ' border-color: transparent; background: linear-gradient(#7accf7, #5cb7ee);' +
+                    ' box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 2px 6px rgba(26, 120, 180, 0.35); }',
+                '#pp-panel .pp-btn-primary:hover, #pp-panel .pp-btn.pp-latched:hover' +
+                    ' { background: linear-gradient(#8ad4f9, #6cc0f1); }',
+                '#pp-panel .pp-btn-accent { color: #a9dcf9; background: rgba(102, 192, 244, 0.12);' +
+                    ' border-color: rgba(102, 192, 244, 0.4); }',
+                '#pp-panel .pp-btn-accent:hover { background: rgba(102, 192, 244, 0.2); }',
+                '#pp-panel .pp-btn-small { height: 26px; font-size: 11px; border-radius: 6px; }',
+                '#pp-panel .pp-btn-danger { color: #f0c4c4; background: rgba(201, 79, 79, 0.18);' +
+                    ' border-color: rgba(201, 79, 79, 0.35); }',
+                '#pp-panel .pp-btn-danger:hover { background: rgba(201, 79, 79, 0.3); }',
+                '#ppNuke { color: #e0a3a3; background: rgba(0, 0, 0, 0.35); border-color: rgba(201, 79, 79, 0.25); }',
+                '#ppNuke.pp-armed, #ppNuke.pp-armed:hover { color: #ffdede; background: #7a1f1f; }',
+                '#pp-panel .pp-ghost { flex: none; height: 24px; padding: 0 8px; cursor: pointer;' +
+                    ' font-size: 11px; font-weight: 600; color: #66c0f4; background: transparent;' +
+                    ' border: none; border-radius: 6px; }',
+                '#pp-panel .pp-ghost:hover { background: rgba(102, 192, 244, 0.14); }',
+                '#pp-panel .pp-kbd { display: inline-flex; align-items: center; justify-content: center;' +
+                    ' min-width: 16px; height: 16px; padding: 0 3px; border-radius: 4px; font-size: 10px;' +
+                    ' font-weight: 400; color: inherit; opacity: 0.8; border: 1px solid currentColor; }',
+
+                // Section labels and the inset boxes they head.
+                '#pp-panel .pp-label { display: flex; justify-content: space-between; margin: 0 2px 6px;' +
+                    ' font-size: 10px; font-weight: 600; letter-spacing: 0.08em !important; color: #9aa9b6; }',
+                '#pp-panel .pp-group { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.06);' +
+                    ' border-radius: 8px; overflow: hidden; }',
+                '#ppPresetList { max-height: 182px; overflow-y: auto; scrollbar-width: thin;' +
+                    ' scrollbar-color: rgba(255, 255, 255, 0.18) transparent; }',
+                '#pp-panel .pp-empty { padding: 10px; font-size: 11px; color: #9aa9b6; }',
+                '#pp-panel .pp-thumb { width: 40px; height: 24px; flex: none; border-radius: 4px; overflow: hidden;' +
+                    ' display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.3);' +
+                    ' outline: 1px solid rgba(255, 255, 255, 0.12); outline-offset: -1px; }',
+                '#pp-panel .pp-thumb > img, #pp-panel .pp-thumb > video' +
+                    ' { width: 100%; height: 100%; object-fit: cover; display: block; }',
+                '#pp-panel .pp-ph { font-size: 9px; color: #9aa9b6; }',
                 // The slot clear and preset delete are full-height boxes at the
                 // row's right edge, so show where they start: a near miss used
                 // to expand the slot row, or apply the preset.
-                '#pp-panel [data-slotclear]:hover, #pp-panel [data-presetdel]:hover' +
-                    ' { color: #ff6b6b !important; background: #22394d !important; }',
-                // Collapsed, the panel is just its title bar: shrink it to the
-                // title and fade it until hovered, so it stays out of the way
-                // of the look you're trying on. !important beats the inline
-                // width and padding the expanded panel uses.
-                '#pp-panel.pp-collapsed { width: auto !important; padding: 4px 8px !important;' +
-                    ' opacity: 0.5; transition: opacity 0.15s; }',
+                '#pp-panel .pp-x { flex: none; align-self: stretch; display: flex; align-items: center;' +
+                    ' justify-content: center; width: 32px; cursor: pointer; color: #9aa9b6; font-size: 15px;' +
+                    ' line-height: 1; border-left: 1px solid rgba(255, 255, 255, 0.06); }',
+                '#pp-panel .pp-x:hover { color: #ff8a8a; background: rgba(255, 255, 255, 0.07); }',
+
+                // Preset rows. The one matching what's applied is tinted.
+                '#pp-panel .pp-prow { display: flex; align-items: center; gap: 8px; min-height: 36px;' +
+                    ' padding-left: 8px; cursor: pointer; }',
+                '#pp-panel .pp-prow + .pp-prow { border-top: 1px solid rgba(255, 255, 255, 0.06); }',
+                '#pp-panel .pp-prow:hover { background: rgba(255, 255, 255, 0.05); }',
+                '#pp-panel .pp-prow.pp-applied { background: rgba(102, 192, 244, 0.1); }',
+                '#pp-panel .pp-prow.pp-applied:hover { background: rgba(102, 192, 244, 0.16); }',
+                '#pp-panel .pp-prow .pp-kbd { flex: none; color: #b4c3cf; border-color: rgba(255, 255, 255, 0.16); opacity: 1; }',
+                '#pp-panel .pp-prow .pp-kbd:empty { border-color: transparent; }',
+                '#pp-panel .pp-pname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+                '#pp-panel .pp-tag { flex: none; display: none; font-size: 10px; color: #a9dcf9; }',
+                '#pp-panel .pp-applied .pp-tag { display: inline; }',
+
+                // Slot rows.
+                '#pp-panel .pp-slot + .pp-slot { border-top: 1px solid rgba(255, 255, 255, 0.06); }',
+                '#pp-panel .pp-slothead { display: flex; align-items: center; gap: 8px; min-height: 40px;' +
+                    ' padding-left: 8px; cursor: pointer; user-select: none; }',
+                '#pp-panel .pp-slothead:hover { background: rgba(255, 255, 255, 0.04); }',
+                '#pp-panel .pp-caret { flex: none; width: 8px; font-size: 9px; color: #9aa9b6; }',
+                '#pp-panel .pp-slotname { flex: 1; min-width: 0; line-height: 1.25; }',
+                '#pp-panel .pp-slotstate { display: block; font-size: 10px; color: #9aa9b6;' +
+                    ' overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+                '#pp-panel .pp-slotstate.pp-on { color: #9fd3a4; }',
+                '#pp-panel .pp-slotbody { padding: 2px 8px 8px 24px; }',
+                '#pp-panel .pp-slotbody input[type="text"] { width: 100%; margin-bottom: 6px; }',
+                '#pp-panel .pp-slotbody label { margin-right: 12px; cursor: pointer; }',
+                '#pp-panel .pp-muted { font-size: 11px; color: #9aa9b6; }',
+
+                // Undo bar, footer, Advanced.
+                '#ppUndoBar { align-items: center; gap: 8px; margin-bottom: 8px; padding: 6px 6px 6px 10px;' +
+                    ' font-size: 11px; background: rgba(102, 192, 244, 0.12);' +
+                    ' border: 1px solid rgba(102, 192, 244, 0.35); border-radius: 8px; }',
+                '#ppUndoDismiss { flex: none; cursor: pointer; color: #9aa9b6; padding: 0 4px; font-size: 14px; }',
+                '#ppUndoDismiss:hover { color: #fff; }',
+                '#pp-panel .pp-foot { display: flex; align-items: flex-start; gap: 10px; margin-top: 12px;' +
+                    ' padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.06); }',
+                '#ppStatus { flex: 1; min-width: 0; min-height: 14px; font-size: 11px; color: #9fd3a4;' +
+                    ' word-break: break-word; }',
+                '#ppStatus.pp-error { color: #ff8a8a; }',
+                '#ppAdvToggle { flex: none; font-size: 11px; color: #9aa9b6; cursor: pointer; user-select: none; }',
+                '#ppAdvToggle:hover { color: #dfe8ef; }',
+                '#ppAdvanced { margin-top: 8px; padding: 10px; }',
+                '#ppAdvanced label { display: block; font-size: 11px; cursor: pointer; color: #b4c3cf; }',
+                '#ppAdvanced label + label { margin-top: 8px; }',
+                '#ppAdvanced .pp-hint { display: none; color: #d9a55a; }',
+                '#ppTextOutArea { width: 100%; font-size: 10px; background: rgba(0, 0, 0, 0.3); color: #dfe8ef;' +
+                    ' border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px; resize: vertical; }',
+
+                // Collapsed, the panel is just its title bar: a small pill,
+                // faded until hovered, so it stays out of the way of the look
+                // you're trying on. !important beats the inline width and
+                // padding the expanded panel uses.
+                '#pp-panel.pp-collapsed { width: auto !important; padding: 4px 4px 4px 10px !important;' +
+                    ' border-radius: 999px; opacity: 0.5; transition: opacity 0.15s; }',
                 '#pp-panel.pp-collapsed:hover { opacity: 1; }',
-                '#pp-panel.pp-collapsed #ppHeader { margin-bottom: 0 !important; }',
+                '#pp-panel.pp-collapsed #ppHeader { margin: 0; }',
+                '#pp-panel.pp-collapsed .pp-title-full { display: none; }',
+                '#pp-panel.pp-collapsed .pp-title-short { display: inline; }',
+                '#pp-panel.pp-collapsed #ppCollapse { border-radius: 999px; }',
             ].join('\n');
             (document.head || document.documentElement).appendChild(style);
         }
@@ -2641,125 +2757,96 @@
         // which would otherwise drag the panel to the left edge.
         panel.style.cssText = `
             position: fixed; top: 10px; right: 10px; left: auto; bottom: auto;
-            margin: 0; overflow: visible; z-index: 2147483646; font-size: 12px;
-            background: #1b2838; border: 1px solid #66c0f4; border-radius: 6px;
-            padding: 10px; font-family: Arial, sans-serif; color: #c7d5e0;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.5); width: 320px;
+            margin: 0; overflow: visible; z-index: 2147483646;
+            padding: 12px; width: 320px;
         `;
+        // The look lives in #pp-style above; inline styles here are layout only.
         panel.innerHTML = `
-            <div id="ppHeader" title="Drag to move, double-click to put it back in the corner"
-                style="display:flex; align-items:center; gap:6px; margin-bottom:8px; cursor:move; user-select:none;">
-                <span style="flex:none; width:14px;"></span>
-                <div style="flex:1; font-weight:bold; text-align:center; font-size:13px;">Try-On for Steam Profiles</div>
-                <span id="ppCollapse" title="Collapse"
-                    style="cursor:pointer; padding:0 4px; font-size:12px; color:#7a8b99;">&#9662;</span>
+            <div id="ppHeader" title="Drag to move, double-click to put it back in the corner">
+                <svg width="8" height="12" viewBox="0 0 8 12" aria-hidden="true" style="flex:none;">
+                    <g fill="#9aa9b6"><circle cx="2" cy="2" r="1"/><circle cx="6" cy="2" r="1"/>
+                    <circle cx="2" cy="6" r="1"/><circle cx="6" cy="6" r="1"/>
+                    <circle cx="2" cy="10" r="1"/><circle cx="6" cy="10" r="1"/></g></svg>
+                <div class="pp-title"><span class="pp-title-full">Try-On for Steam Profiles</span><span
+                    class="pp-title-short">Try-On</span></div>
+                <span id="ppCollapse" title="Collapse">&#9662;</span>
             </div>
             <div id="ppBody">
-                <div style="display:flex; gap:6px; margin-bottom:8px;">
-                    <button id="ppGrab" title="Fill every slot with what this page is already using. Each row has its own Grab for just that item."
-                        style="flex:1; padding:5px; cursor:pointer; background:#2a475e;
-                        border:1px solid #66c0f4; border-radius:3px; color:#c7d5e0;">
-                        Grab all from this page
-                    </button>
-                </div>
+                <button id="ppGrab" class="pp-btn pp-btn-accent" style="display:block; width:100%; height:32px; margin-bottom:14px;"
+                    title="Fill every slot with what this page is already using. Each row has its own Grab for just that item.">Grab all from this page</button>
 
-                <div id="ppPresetHeading" style="font-size:11px; color:#7a8b99; margin-bottom:4px;">Presets</div>
-                <div id="ppPresetList" style="max-height:132px; overflow-y:auto; margin-bottom:6px;
-                    border:1px solid #2a475e; border-radius:3px;"></div>
-                <div id="ppUndoBar" style="display:none; align-items:center; gap:6px; margin-bottom:6px;
-                    padding:4px 6px; border:1px solid #66c0f4; border-radius:3px; background:#22394d; font-size:11px;">
+                <div class="pp-label"><span>PRESETS</span><span id="ppPresetCount"></span></div>
+                <div id="ppPresetList" class="pp-group" style="margin-bottom:8px;"></div>
+                <div id="ppUndoBar" style="display:none;">
                     <span id="ppUndoMsg" style="flex:1; min-width:0;"></span>
-                    <button id="ppUndoBtn" title="Undo the change described here"
-                        style="flex:none; padding:2px 8px; cursor:pointer; background:#66c0f4;
-                        border:none; border-radius:3px; color:#1b2838; font-weight:bold; font-size:11px;">Undo</button>
-                    <span id="ppUndoDismiss" title="Dismiss"
-                        style="flex:none; cursor:pointer; color:#7a8b99; padding:0 2px; font-size:14px;">&times;</span>
+                    <button id="ppUndoBtn" class="pp-btn pp-btn-primary pp-btn-small" style="flex:none; height:24px;"
+                        title="Undo the change described here">Undo</button>
+                    <span id="ppUndoDismiss" title="Dismiss">&times;</span>
                 </div>
-                <div style="display:flex; gap:6px; margin-bottom:10px;">
+                <div style="display:flex; gap:6px; margin-bottom:16px;">
                     <input id="ppPresetName" type="text" placeholder="Preset name (optional)"
-                        style="flex:1; min-width:0; box-sizing:border-box; padding:4px;">
-                    <button id="ppPresetSave" title="Save the filled slots as a preset. Uses what's applied if the fields are empty."
-                        style="flex:none; padding:4px 10px; cursor:pointer; background:#2a475e;
-                        border:none; border-radius:3px; color:#c7d5e0;">Save</button>
+                        style="flex:1; min-width:0; height:30px;">
+                    <button id="ppPresetSave" class="pp-btn" style="flex:none;"
+                        title="Save the filled slots as a preset. Uses what's applied if the fields are empty.">Save</button>
                 </div>
 
-                ${slotRowsMarkup()}
+                <div class="pp-label"><span>THIS LOOK</span></div>
+                <div id="ppSlots" class="pp-group">${slotRowsMarkup()}</div>
 
-                <div id="ppActions" style="display:flex; gap:6px; margin-top:8px;">
-                    <button id="ppApply" title="Apply every slot that has URL(s) filled in"
-                        style="flex:1; padding:5px; cursor:pointer; background:#66c0f4;
-                        border:none; border-radius:3px; color:#1b2838; font-weight:bold;">Apply</button>
-                    <button id="ppClear" title="Remove everything you've applied and put the page back"
-                        style="flex:1; padding:5px; cursor:pointer; background:#2a475e;
-                        border:none; border-radius:3px; color:#c7d5e0;">Clear</button>
-                    <button id="ppPeek" title="Hold to see this page's own look (or hold P). Press O to toggle it and stay."
-                        style="flex:1; padding:5px; cursor:pointer; background:#2a475e;
-                        border:1px solid #66c0f4; border-radius:3px; color:#c7d5e0;">Peek</button>
+                <div id="ppActions" style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:6px; margin-top:14px;">
+                    <button id="ppApply" class="pp-btn pp-btn-primary" style="height:34px;"
+                        title="Apply every slot that has URL(s) filled in">Apply</button>
+                    <button id="ppClear" class="pp-btn" style="height:34px;"
+                        title="Remove everything you've applied and put the page back">Clear</button>
+                    <button id="ppPeek" class="pp-btn" style="height:34px;"
+                        title="Hold to see this page's own look (or hold P). Press O to toggle it and stay.">Peek <span class="pp-kbd">P</span></button>
                 </div>
 
-                <div id="ppAdvToggle" title="Settings you shouldn't normally need"
-                    style="margin-top:8px; font-size:11px; color:#7a8b99; cursor:pointer; user-select:none;">
-                    &#9656; Advanced
+                <div class="pp-foot">
+                    <div id="ppStatus"></div>
+                    <div id="ppAdvToggle" title="Settings you shouldn't normally need">Advanced &#9656;</div>
                 </div>
-                <div id="ppAdvanced" style="display:none; margin-top:6px; padding:6px;
-                    border:1px solid #2a475e; border-radius:3px;">
-                    <label title="Press 1-9 anywhere on the page to apply that preset. Numbers follow the list order."
-                        style="display:block; font-size:11px; cursor:pointer; color:#7a8b99;">
+                <div id="ppAdvanced" class="pp-group" style="display:none;">
+                    <label title="Press 1-9 anywhere on the page to apply that preset. Numbers follow the list order.">
                         <input id="ppKeys" type="checkbox" checked> Number keys apply presets<span
-                            id="ppKeysHint" style="display:none; color:#b8873c;"> \u2014 default: on</span>
+                            id="ppKeysHint" class="pp-hint"> \u2014 default: on</span>
                     </label>
-                    <label title="Off by default \u2014 deleting a preset can be undone."
-                        style="display:block; margin-top:6px; font-size:11px; cursor:pointer; color:#7a8b99;">
+                    <label title="Off by default \u2014 deleting a preset can be undone.">
                         <input id="ppConfirm" type="checkbox"> Ask before deleting a preset<span
-                            id="ppConfirmHint" style="display:none; color:#b8873c;"> \u2014 default: off</span>
+                            id="ppConfirmHint" class="pp-hint"> \u2014 default: off</span>
                     </label>
-                    <label title="Puts your changes back if the page resets them, or if Steam swaps the page content without a reload."
-                        style="display:block; margin-top:6px; font-size:11px; cursor:pointer; color:#7a8b99;">
+                    <label title="Puts your changes back if the page resets them, or if Steam swaps the page content without a reload.">
                         <input id="ppAuto" type="checkbox" checked> Keep applied while browsing<span
-                            id="ppAutoHint" style="display:none; color:#b8873c;"> \u2014 default: on</span>
+                            id="ppAutoHint" class="pp-hint"> \u2014 default: on</span>
                     </label>
-                    <label title="Off by default: on other people's profiles and Steam's item previews the panel only grabs, and Apply sends to your own profile tabs instead."
-                        style="display:block; margin-top:6px; font-size:11px; cursor:pointer; color:#7a8b99;">
+                    <label title="Off by default: on other people's profiles and Steam's item previews the panel only grabs, and Apply sends to your own profile tabs instead.">
                         <input id="ppEverywhere" type="checkbox"> Apply on every profile<span
-                            id="ppEverywhereHint" style="display:none; color:#b8873c;"> \u2014 default: off</span>
+                            id="ppEverywhereHint" class="pp-hint"> \u2014 default: off</span>
                     </label>
-                    <div style="display:flex; gap:6px; margin-top:6px;">
-                        <button id="ppExport" title="Download all presets as a .json file"
-                            style="flex:1; padding:4px; cursor:pointer; background:#2a475e;
-                            border:none; border-radius:3px; color:#c7d5e0; font-size:11px;">Export</button>
-                        <button id="ppImport" title="Add presets from a .json file. Existing presets are kept."
-                            style="flex:1; padding:4px; cursor:pointer; background:#2a475e;
-                            border:none; border-radius:3px; color:#c7d5e0; font-size:11px;">Import</button>
+                    <div style="display:flex; gap:6px; margin-top:10px;">
+                        <button id="ppExport" class="pp-btn pp-btn-small" style="flex:1;"
+                            title="Download all presets as a .json file">Export</button>
+                        <button id="ppImport" class="pp-btn pp-btn-small" style="flex:1;"
+                            title="Add presets from a .json file. Existing presets are kept.">Import</button>
                     </div>
                     <input id="ppImportFile" type="file" accept="application/json,.json" style="display:none;">
-                    <button id="ppDeleteAll" title="Delete every saved preset. Always asks first."
-                        style="width:100%; margin-top:6px; padding:4px; cursor:pointer; background:#5a2a2a;
-                        border:none; border-radius:3px; color:#e8c7c7; font-size:11px;">Delete all presets</button>
-                    <button id="ppReset" title="Restore default settings. Saved presets are kept."
-                        style="width:100%; margin-top:6px; padding:4px; cursor:pointer; background:#2a475e;
-                        border:none; border-radius:3px; color:#c7d5e0; font-size:11px;">Reset settings to defaults</button>
-                    <button id="ppDiag" title="Copy measurements of this page's own look, for debugging"
-                        style="width:100%; margin-top:6px; padding:4px; cursor:pointer; background:#2a475e;
-                        border:none; border-radius:3px; color:#c7d5e0; font-size:11px;">Copy sizing diagnostics</button>
-                    <div style="margin-top:12px; padding-top:10px; border-top:1px solid #2a475e;">
-                        <button id="ppNuke" title="Erases presets, settings, panel position and everything applied. A backup is kept so it can be undone."
-                            style="width:100%; padding:5px; cursor:pointer; background:#0d0d0d;
-                            border:1px solid #3a1f1f; border-radius:3px; color:#c78787; font-size:11px;">
-                            Erase everything
-                        </button>
+                    <button id="ppDeleteAll" class="pp-btn pp-btn-small pp-btn-danger" style="width:100%; margin-top:6px;"
+                        title="Delete every saved preset. Always asks first.">Delete all presets</button>
+                    <button id="ppReset" class="pp-btn pp-btn-small" style="width:100%; margin-top:6px;"
+                        title="Restore default settings. Saved presets are kept.">Reset settings to defaults</button>
+                    <button id="ppDiag" class="pp-btn pp-btn-small" style="width:100%; margin-top:6px;"
+                        title="Copy measurements of this page's own look, for debugging">Copy sizing diagnostics</button>
+                    <div style="margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.06);">
+                        <button id="ppNuke" class="pp-btn pp-btn-small" style="width:100%;"
+                            title="Erases presets, settings, panel position and everything applied. A backup is kept so it can be undone.">Erase everything</button>
                     </div>
                 </div>
 
-                <div id="ppStatus" style="margin-top:6px; font-size:11px; min-height:14px;
-                    word-break:break-word; color:#8fbc8f;"></div>
-                <div id="ppTextOut" style="display:none; margin-top:6px;">
-                    <div id="ppTextOutLabel" style="font-size:11px; color:#7a8b99; margin-bottom:4px;"></div>
-                    <textarea id="ppTextOutArea" readonly rows="5" style="width:100%; box-sizing:border-box;
-                        font-size:10px; font-family:monospace; background:#0e1620; color:#c7d5e0;
-                        border:1px solid #2a475e; border-radius:3px; resize:vertical;"></textarea>
-                    <button id="ppTextOutClose" title="Hide this text box"
-                        style="width:100%; margin-top:4px; padding:3px; cursor:pointer; background:#2a475e;
-                        border:none; border-radius:3px; color:#c7d5e0; font-size:11px;">Close</button>
+                <div id="ppTextOut" style="display:none; margin-top:8px;">
+                    <div id="ppTextOutLabel" class="pp-muted" style="margin-bottom:4px;"></div>
+                    <textarea id="ppTextOutArea" readonly rows="5"></textarea>
+                    <button id="ppTextOutClose" class="pp-btn pp-btn-small" style="width:100%; margin-top:4px;"
+                        title="Hide this text box">Close</button>
                 </div>
             </div>
         `;
@@ -2770,6 +2857,9 @@
 
         const $ = sel => panel.querySelector(sel);
         statusEl = $('#ppStatus');
+        // Re-marks the applied preset; set once the preset list exists. Slot
+        // rows refresh before that, so it starts as a no-op.
+        let onSlotsChanged = () => {};
 
         const presetList = $('#ppPresetList');
         const presetNameInput = $('#ppPresetName');
@@ -3072,15 +3162,17 @@
             const state = slotState[slotId];
             const label = panel.querySelector(`[data-slotstate="${slotId}"]`);
             const thumb = panel.querySelector(`[data-slotthumb="${slotId}"]`);
-            label.textContent = state.active ? state.active.kind : 'none';
-            label.style.color = state.active ? '#8fbc8f' : '#7a8b99';
+            onSlotsChanged();
+            label.textContent = state.active ? 'Applied: ' + state.active.kind : 'Empty';
+            label.classList.toggle('pp-on', !!state.active);
             thumb.innerHTML = '';
             // Themes paint the thumb with an inline background colour, and
             // emptying its children doesn't remove that.
-            thumb.style.background = '#0e1620';
+            thumb.style.background = '';
             thumb.title = '';
             const value = state.active || readSlotFields(slotId);
             if (!value) return;
+            if (!state.active) label.textContent = 'Grabbed, not applied';
 
             if (value.kind === 'theme') {
                 const swatch = (value.vars || {})['--color-showcase-header']
@@ -3095,7 +3187,6 @@
                     const img = document.createElement('img');
                     let attempt = 0;
                     img.src = sources[0];
-                    img.style.cssText = 'width:100%; height:100%; object-fit:cover; display:block;';
                     img.addEventListener('error', () => {
                         attempt++;
                         if (attempt < sources.length) { img.src = sources[attempt]; return; }
@@ -3108,12 +3199,11 @@
                 } else {
                     const tag = document.createElement('span');
                     tag.textContent = 'THM';
-                    tag.style.cssText = 'font-size:9px; color:#7a8b99;';
+                    tag.className = 'pp-ph';
                     thumb.appendChild(tag);
                 }
 
-                label.textContent = state.active ? themeLabel(state.active) : 'none';
-                label.style.color = state.active ? '#8fbc8f' : '#7a8b99';
+                if (state.active) label.textContent = themeLabel(state.active);
                 if (appid && appNames[appid] === undefined) {
                     resolveAppName(appid).then(name => { if (name) refreshSlotRow(slotId); });
                 }
@@ -3136,14 +3226,12 @@
                 vid.preload = 'metadata';
                 vid.setAttribute('muted', '');
                 vid.setAttribute('playsinline', '');
-                vid.style.cssText = 'width:100%; height:100%; object-fit:cover; display:block;';
                 vid.addEventListener('error', () => { thumb.innerHTML = ''; });
                 primeThumbVideo(vid);
                 thumb.appendChild(vid);
             } else if (still) {
                 const img = document.createElement('img');
                 img.src = still;
-                img.style.cssText = 'width:100%; height:100%; object-fit:cover; display:block;';
                 img.addEventListener('error', () => { thumb.innerHTML = ''; });
                 thumb.appendChild(img);
             }
@@ -3404,9 +3492,9 @@
         window.addEventListener('blur', peekRelease);
 
         onPeekChange = () => {
-            peekBtn.textContent = peekLatched ? 'Peeking (O)' : 'Peek';
-            peekBtn.style.background = peekLatched ? '#66c0f4' : '#2a475e';
-            peekBtn.style.color = peekLatched ? '#1b2838' : '#c7d5e0';
+            peekBtn.innerHTML = peekLatched ? 'Peeking <span class="pp-kbd">O</span>'
+                : 'Peek <span class="pp-kbd">P</span>';
+            peekBtn.classList.toggle('pp-latched', peekLatched);
         };
 
         document.addEventListener('keydown', (e) => {
@@ -3600,7 +3688,7 @@
             disarmNuke();
             const open = advancedBox.style.display !== 'none';
             advancedBox.style.display = open ? 'none' : '';
-            advancedToggle.innerHTML = (open ? '&#9656;' : '&#9662;') + ' Advanced';
+            advancedToggle.innerHTML = 'Advanced ' + (open ? '&#9656;' : '&#9662;');
         });
 
         // ---------------- undo ----------------
@@ -3634,19 +3722,17 @@
 
         // ---------------- settings ----------------
 
-        function updateKeysHint() { keysHint.style.display = keysInput.checked ? 'none' : ''; }
-        function updateConfirmHint() { confirmHint.style.display = confirmInput.checked ? '' : 'none'; }
-        function updateAutoHint() { autoHint.style.display = autoInput.checked ? 'none' : ''; }
-        function updateEverywhereHint() { everywhereHint.style.display = everywhereInput.checked ? '' : 'none'; }
+        // The hints are hidden by their class, so showing one takes 'inline'.
+        function updateKeysHint() { keysHint.style.display = keysInput.checked ? 'none' : 'inline'; }
+        function updateConfirmHint() { confirmHint.style.display = confirmInput.checked ? 'inline' : 'none'; }
+        function updateAutoHint() { autoHint.style.display = autoInput.checked ? 'none' : 'inline'; }
+        function updateEverywhereHint() { everywhereHint.style.display = everywhereInput.checked ? 'inline' : 'none'; }
 
         // Peek has nothing to show where nothing can be applied.
         function setPeekAvailable(available, title) {
             const peek = $('#ppPeek');
             peek.disabled = !available;
             peek.title = title;
-            peek.style.opacity = available ? '' : '0.4';
-            peek.style.cursor = available ? 'pointer' : 'default';
-            peek.style.borderColor = available ? '#66c0f4' : '#2a475e';
         }
 
         // Own profile: Apply paints this page. Anyone else's, or a Steam item
@@ -3843,14 +3929,13 @@
         function placeholder(text) {
             const box = document.createElement('span');
             box.textContent = text;
-            box.style.cssText = 'font-size:9px; color:#7a8b99;';
+            box.className = 'pp-ph';
             return box;
         }
 
         function buildThumb(p) {
             const thumb = document.createElement('div');
-            thumb.style.cssText = 'width:40px; height:24px; flex:none; border-radius:2px;' +
-                'background:#0e1620; overflow:hidden; display:flex; align-items:center; justify-content:center;';
+            thumb.className = 'pp-thumb';
             const still = presetStill(p);
             const clip = presetClip(p);
 
@@ -3868,7 +3953,6 @@
                 vid.preload = 'metadata';
                 vid.setAttribute('muted', '');
                 vid.setAttribute('playsinline', '');
-                vid.style.cssText = 'width:100%; height:100%; object-fit:cover; display:block;';
                 vid.addEventListener('error', () => {
                     thumb.innerHTML = '';
                     thumb.appendChild(placeholder('VID'));
@@ -3879,7 +3963,6 @@
             } else if (still) {
                 const img = document.createElement('img');
                 img.dataset.src = still;
-                img.style.cssText = 'width:100%; height:100%; object-fit:cover; display:block;';
                 img.addEventListener('error', () => {
                     thumb.innerHTML = '';
                     thumb.appendChild(placeholder('IMG'));
@@ -3908,18 +3991,35 @@
             if (rowRect.bottom > listRect.bottom) presetList.scrollTop += rowRect.bottom - listRect.bottom;
             else if (rowRect.top < listRect.top) presetList.scrollTop -= listRect.top - rowRect.top;
             if (row.animate) {
-                row.animate([{ background: '#3d6d8f' }, { background: 'transparent' }],
+                row.animate([{ background: 'rgba(102, 192, 244, 0.35)' }, { background: 'transparent' }],
                     { duration: 1200, easing: 'ease-out' });
             }
         }
 
+        // A preset counts as applied when every slot it holds is what's
+        // applied now; other slots may hold anything.
+        function presetIsApplied(p) {
+            const values = presetValues(p);
+            const ids = Object.keys(values);
+            return ids.length > 0 &&
+                ids.every(id => slotState[id] && sameValue(slotState[id].active, values[id]));
+        }
+
+        function markAppliedPresets() {
+            for (const row of presetList.children) {
+                const p = presets[Number(row.dataset.presetIndex)];
+                row.classList.toggle('pp-applied', !!p && presetIsApplied(p));
+            }
+        }
+        onSlotsChanged = markAppliedPresets;
+
         function renderPresets() {
             thumbObserver.disconnect();
             presetList.innerHTML = '';
-            $('#ppPresetHeading').textContent = presets.length ? 'Presets (' + presets.length + ')' : 'Presets';
+            $('#ppPresetCount').textContent = presets.length ? String(presets.length) : '';
             if (!presets.length) {
                 const empty = document.createElement('div');
-                empty.style.cssText = 'padding:6px; font-size:11px; color:#7a8b99;';
+                empty.className = 'pp-empty';
                 empty.textContent = 'No presets yet \u2014 Grab or paste URLs, then Save.';
                 presetList.appendChild(empty);
                 return;
@@ -3927,8 +4027,8 @@
 
             presets.forEach((p, index) => {
                 const row = document.createElement('div');
-                row.style.cssText = 'display:flex; align-items:center; gap:6px; padding:4px;' +
-                    'cursor:pointer; border-bottom:1px solid #2a475e;';
+                row.className = 'pp-prow';
+                row.dataset.presetIndex = String(index);
 
                 const slotCount = Object.keys(presetValues(p)).length;
                 const applyHint = (numberKeys && index < 9)
@@ -3942,15 +4042,18 @@
                 if (numberKeys) {
                     const badge = document.createElement('span');
                     badge.textContent = index < 9 ? String(index + 1) : '';
-                    badge.style.cssText = 'flex:none; width:9px; text-align:center; font-size:10px; color:#7a8b99;';
+                    badge.className = 'pp-kbd';
                     row.appendChild(badge);
                 }
 
                 const thumb = buildThumb(p);
                 const label = document.createElement('div');
-                label.style.cssText = 'flex:1; min-width:0; font-size:11px; overflow:hidden;' +
-                    'text-overflow:ellipsis; white-space:nowrap;';
+                label.className = 'pp-pname';
                 label.textContent = p.name;
+
+                const tag = document.createElement('span');
+                tag.className = 'pp-tag';
+                tag.textContent = 'applied';
 
                 const del = document.createElement('span');
                 del.textContent = '\u00d7';
@@ -3958,12 +4061,11 @@
                 del.dataset.presetdel = '';
                 // Full row height at the right edge, like the slot rows' clear:
                 // a near miss here lands on the row and applies the preset.
-                del.style.cssText = 'flex:none; align-self:stretch; display:flex; align-items:center;' +
-                    'justify-content:center; width:26px; margin:-4px -4px -4px 0;' +
-                    'border-left:1px solid #2a475e; color:#7a8b99; font-size:15px; line-height:1;';
+                del.className = 'pp-x';
 
                 row.appendChild(thumb);
                 row.appendChild(label);
+                row.appendChild(tag);
                 row.appendChild(del);
 
                 function beginRename() {
@@ -3972,8 +4074,7 @@
                     const input = document.createElement('input');
                     input.type = 'text';
                     input.value = p.name;
-                    input.style.cssText = 'width:100%; box-sizing:border-box; padding:1px 2px; font-size:11px;' +
-                        'background:#0e1620; color:#c7d5e0; border:1px solid #66c0f4; border-radius:2px;';
+                    input.className = 'pp-rename';
                     label.textContent = '';
                     label.appendChild(input);
                     input.focus();
@@ -4019,7 +4120,6 @@
                 });
 
                 row.addEventListener('mouseenter', () => {
-                    row.style.background = '#2a475e';
                     const v = thumb.querySelector('video');
                     if (!v) return;
                     if (!v.getAttribute('src') && v.dataset.clip) {
@@ -4030,7 +4130,6 @@
                     if (pr && pr.catch) pr.catch(() => {});
                 });
                 row.addEventListener('mouseleave', () => {
-                    row.style.background = '';
                     const v = thumb.querySelector('video');
                     if (!v || !v.getAttribute('src')) return;
                     v.pause();
@@ -4098,6 +4197,7 @@
 
                 presetList.appendChild(row);
             });
+            markAppliedPresets();
         }
 
         $('#ppPresetSave').addEventListener('click', async () => {
@@ -4435,8 +4535,7 @@
             nukeArmed = false;
             clearTimeout(nukeTimer);
             nukeBtn.textContent = 'Erase everything';
-            nukeBtn.style.background = '#0d0d0d';
-            nukeBtn.style.color = '#c78787';
+            nukeBtn.classList.remove('pp-armed');
         }
 
         async function restoreFromBackup() {
@@ -4531,8 +4630,7 @@
             if (!nukeArmed) {
                 nukeArmed = true;
                 nukeBtn.textContent = 'Click again to erase ' + blastRadius();
-                nukeBtn.style.background = '#7a1f1f';
-                nukeBtn.style.color = '#ffdede';
+                nukeBtn.classList.add('pp-armed');
                 setStatus('Export first if you want a copy \u2014 this clears presets and settings.', true);
                 nukeTimer = setTimeout(disarmNuke, 3000);
                 return;
