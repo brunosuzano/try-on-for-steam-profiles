@@ -219,6 +219,12 @@ assets *and* the theme. The mini profile isn't rendered on a profile page, so
 it comes from the dialog's item list, identified by elimination against the
 assets the fetched page supplied — no English labels involved.
 
+**Steam takes ~0.5s to build that preview page** (measured November 2026:
+~100KB, 500–560ms to the first byte; parsing it takes 4ms). The download
+therefore starts when the dialog opens, not when Grab is pressed. The
+extension's detour through `background.js` adds ~50ms when the service
+worker has to wake, ~6ms when it's awake: not worth optimising.
+
 **The script must not run inside that iframe** (`@noframes`). It's a
 steamcommunity.com page, so `@match` covers it, and a copy running in there
 picks up the staged try-on through cross-tab sync and paints it over the very

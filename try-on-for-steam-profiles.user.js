@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Try-On for Steam Profiles
 // @namespace    https://github.com/brunosuzano/try-on-for-steam-profiles
-// @version      1.50
+// @version      1.51
 // @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
 // @author       Bruno Moreira
 // @license      MIT
@@ -37,7 +37,7 @@
     // identically to 9.11, the abstraction fits.
     // =================================================================
 
-    const SCRIPT_VERSION = '1.50';
+    const SCRIPT_VERSION = '1.51';
     const STATE_KEY = 'ppApplied';
     const PRESETS_KEY = 'ppPresets';
     const AUTO_KEY = 'ppAuto';
@@ -2237,18 +2237,52 @@
         return '';
     }
 
-    let bundleCache = { url: '', slots: null };
+    function previewFrameUrl(modal) {
+        const frame = modal && modal.querySelector('iframe[src*="previewprofile=1"]');
+        const url = frame ? frame.getAttribute('src') : '';
+        return url ? url.replace(/&amp;/g, '&') : '';
+    }
+
+    // Preview pages by URL, holding the request itself: a Grab pressed while
+    // the page is still downloading waits for that download rather than
+    // starting another. A failed one is dropped so the next Grab retries,
+    // but prefetching skips it, or the 250ms poll would retry it nonstop.
+    const bundlePages = new Map();
+    const bundleFailed = new Set();
+    const BUNDLE_PAGES_MAX = 10;
+
+    function bundlePage(url) {
+        let page = bundlePages.get(url);
+        if (!page) {
+            page = requestText(url).then((html) => {
+                if (html) bundleFailed.delete(url);
+                else {
+                    bundleFailed.add(url);
+                    if (bundlePages.get(url) === page) bundlePages.delete(url);
+                }
+                return html;
+            });
+            bundlePages.set(url, page);
+            if (bundlePages.size > BUNDLE_PAGES_MAX) bundlePages.delete(bundlePages.keys().next().value);
+        }
+        return page;
+    }
+
+    // Steam takes ~0.5s to build a preview page (measured; the extension's
+    // own overhead is ~50ms at most), and people look at a bundle before
+    // grabbing it. So the download starts as soon as the dialog opens.
+    function prefetchBundle() {
+        const url = previewFrameUrl(storeModal());
+        if (url && !bundleFailed.has(url)) bundlePage(url);
+    }
 
     async function bundleFromPreviewFrame(modal) {
-        const frame = modal.querySelector('iframe[src*="previewprofile=1"]');
-        const url = frame ? frame.getAttribute('src') : '';
+        const url = previewFrameUrl(modal);
         if (!url) return null;
 
-        const clean = url.replace(/&amp;/g, '&');
-        // Cached so a per-slot grab doesn't refetch the same page.
-        if (bundleCache.url === clean && bundleCache.slots) return bundleCache.slots;
-
-        const html = await requestText(clean);
+        // Parsed fresh each time (~4ms): the dialog-derived parts below are
+        // added to the result, so a shared parsed copy would collect them.
+        const html = await bundlePage(url);
         if (!html) return null;
 
         const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -2264,7 +2298,6 @@
         }
 
         if (!Object.keys(slots).length) return null;
-        bundleCache = { url: clean, slots };
         return slots;
     }
 
@@ -2422,6 +2455,7 @@
             timer = setTimeout(() => {
                 const preview = storePreviewValue();
                 if (preview) lastStorePreview = preview;
+                prefetchBundle();
             }, 100);
         });
         observer.observe(document.body, { childList: true, subtree: true });
@@ -2434,6 +2468,7 @@
         setInterval(() => {
             const preview = storePreviewValue();
             if (preview) lastStorePreview = preview;
+            prefetchBundle();
         }, 250);
 
         // Second capture point: the tile itself. Shop tiles
