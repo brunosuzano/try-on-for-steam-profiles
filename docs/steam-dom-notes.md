@@ -250,6 +250,13 @@ value didn't change is left out of the event, so a repeated tag would vanish.
 Matching on the value instead fails when a write doesn't change anything:
 no event fires, and the remembered value later swallows a real remote write.
 
+**Reloading or updating the extension orphans open tabs.** The old content
+script keeps running with its panel on screen, but every `chrome.*` call
+throws "Extension context invalidated", and Chrome doesn't inject the new
+copy until the tab reloads. Store updates do this to real users. The shim
+treats it as expected: no warning (Chrome's Errors page lists those), and
+the panel shows a red "reload this tab" note that stays.
+
 **Content scripts are bound by the page's CORS** (Chrome 85+), unlike
 `GM_xmlhttpRequest`. The store API from a community page, and the bundle
 preview from the store, go through `background.js`, which sends cookies as

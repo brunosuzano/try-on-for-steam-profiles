@@ -66,6 +66,28 @@
     const INSTANCE_ID = Math.random().toString(36).slice(2);
     let writeSeq = 0;
 
+    // Reloading or updating the extension cuts off the copy already running
+    // in each open tab: its panel stays on the page, but every chrome.* call
+    // throws "Extension context invalidated", and Chrome doesn't inject the
+    // new copy until the tab reloads. That's expected, not a fault, so it's
+    // not a warning (Chrome lists those on the Errors page); the panel says
+    // to reload instead, once.
+    let onContextLost = null;    // set by the panel
+    let contextLostReported = false;
+
+    function contextLost(e) {
+        if (!HAS_EXTENSION_RUNTIME) return false;
+        if (!chrome.runtime || !chrome.runtime.id) return true;
+        return /context invalidated/i.test(String((e && e.message) || e));
+    }
+
+    function reportContextLost() {
+        if (contextLostReported) return;
+        contextLostReported = true;
+        console.log('[previewer] the extension was reloaded or updated; this tab needs a reload');
+        if (onContextLost) onContextLost();
+    }
+
     const store = {
         async get(key, fallback = '') {
             try {
@@ -77,7 +99,8 @@
                 const v = localStorage.getItem(key);
                 return v === null ? fallback : v;
             } catch (e) {
-                console.warn('[previewer] storage read failed', e);
+                if (contextLost(e)) reportContextLost();
+                else console.warn('[previewer] storage read failed', e);
                 return fallback;
             }
         },
@@ -88,14 +111,17 @@
                     // One set() is one onChanged event, so the tag arrives
                     // with the value it labels. The counter makes every tag
                     // new: an unchanged tag would be left out of the event.
-                    return chrome.storage.local.set({
+                    // Awaited, or a failure would escape this catch.
+                    await chrome.storage.local.set({
                         [key]: value,
                         [WRITE_TAG_KEY]: INSTANCE_ID + ':' + (++writeSeq),
                     });
+                    return;
                 }
                 localStorage.setItem(key, value);
             } catch (e) {
-                console.warn('[previewer] storage write failed', e);
+                if (contextLost(e)) reportContextLost();
+                else console.warn('[previewer] storage write failed', e);
             }
         },
         subscribe(key, callback) {
@@ -146,9 +172,14 @@
                 return;
             }
             if (HAS_EXTENSION_RUNTIME) {
-                chrome.runtime.sendMessage({ type: 'fetchText', url, timeout })
-                    .then(res => resolve((res && res.text) || ''))
-                    .catch(() => resolve(''));
+                const lost = (e) => { if (contextLost(e)) reportContextLost(); resolve(''); };
+                try {
+                    chrome.runtime.sendMessage({ type: 'fetchText', url, timeout })
+                        .then(res => resolve((res && res.text) || ''))
+                        .catch(lost);
+                } catch (e) {
+                    lost(e);    // a cut-off context throws before returning a promise
+                }
                 return;
             }
             fetch(url, { credentials: 'omit' })
@@ -196,7 +227,11 @@
     // Lets the toolbar button show "off" on tabs where the panel is hidden.
     function reportPanelHidden(hidden) {
         if (!HAS_EXTENSION_RUNTIME) return;
-        chrome.runtime.sendMessage({ type: 'panelState', hidden }).catch(() => {});
+        try {
+            chrome.runtime.sendMessage({ type: 'panelState', hidden }).catch(() => {});
+        } catch (e) {
+            if (contextLost(e)) reportContextLost();
+        }
     }
 
     // ---------------- url helpers ----------------
@@ -1604,7 +1639,7 @@
         clearTimeout(statusFadeTimer);
         clearTimeout(statusSwapTimer);
         if (!statusEl) return;
-        showStatusText(message || standingNote(), !!isError);
+        showStatusText(message || standingNote(), message ? !!isError : !!standingNotes.lost);
         // Results fade: the page shows what happened, and a stale line reads
         // as if it were still news. Errors stay until the next message, so a
         // failure is still explained after a glance away (fail loudly).
@@ -1612,7 +1647,7 @@
         const shownFor = Math.min(8000, 3000 + message.length * 40);
         statusFadeTimer = setTimeout(() => {
             statusEl.classList.add('pp-fading');
-            statusSwapTimer = setTimeout(() => showStatusText(standingNote(), false), 600);
+            statusSwapTimer = setTimeout(() => showStatusText(standingNote(), !!standingNotes.lost), 600);
         }, shownFor);
     }
 
@@ -1620,13 +1655,13 @@
     // else on screen explains, like "press O to go back" while the page's
     // own look is showing. They stay up for as long as the state lasts, and
     // a fading result falls back to them rather than to an empty line.
-    // First non-empty one wins.
-    const standingNotes = { peek: '', mode: '' };
+    // First non-empty one wins; `lost` (this tab needs a reload) shows red.
+    const standingNotes = { lost: '', peek: '', mode: '' };
     let statusFadeTimer = null;
     let statusSwapTimer = null;
 
     function standingNote() {
-        return standingNotes.peek || standingNotes.mode;
+        return standingNotes.lost || standingNotes.peek || standingNotes.mode;
     }
 
     function showStatusText(text, isError) {
@@ -2885,6 +2920,12 @@
         // Re-marks the applied preset; set once the preset list exists. Slot
         // rows refresh before that, so it starts as a no-op.
         let onSlotsChanged = () => {};
+
+        // Stays up for good: this copy can still paint, but can't save or
+        // sync anymore, and nothing else on screen would say why.
+        onContextLost = () => setStandingNote('lost',
+            'Try-On was updated or reloaded. Reload this tab to keep using it.');
+        if (contextLostReported) onContextLost();
 
         const presetList = $('#ppPresetList');
         const presetNameInput = $('#ppPresetName');
