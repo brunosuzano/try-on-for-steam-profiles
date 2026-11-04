@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Try-On for Steam Profiles
 // @namespace    https://github.com/brunosuzano/try-on-for-steam-profiles
-// @version      1.55
+// @version      1.56
 // @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
 // @author       Bruno Moreira
 // @license      MIT
@@ -37,7 +37,7 @@
     // identically to 9.11, the abstraction fits.
     // =================================================================
 
-    const SCRIPT_VERSION = '1.55';
+    const SCRIPT_VERSION = '1.56';
     const STATE_KEY = 'ppApplied';
     const PRESETS_KEY = 'ppPresets';
     const AUTO_KEY = 'ppAuto';
@@ -3264,8 +3264,6 @@
 
         for (const slot of SLOTS) {
             const head = panel.querySelector(`[data-slothead="${slot.id}"]`);
-            const body = panel.querySelector(`[data-slotbody="${slot.id}"]`);
-            const caret = panel.querySelector(`[data-slotcaret="${slot.id}"]`);
             head.addEventListener('mouseenter', () => {
                 const vid = head.querySelector('video');
                 if (!vid) return;
@@ -3279,11 +3277,14 @@
                 try { vid.currentTime = 0.1; } catch (e) {}
             });
 
-            head.addEventListener('click', (e) => {
+            head.addEventListener('click', async (e) => {
                 if (e.target.dataset && (e.target.dataset.slotclear || e.target.dataset.slotgrab)) return;
-                const open = body.style.display !== 'none';
-                body.style.display = open ? 'none' : '';
-                caret.innerHTML = open ? '&#9656;' : '&#9662;';
+                const open = openState();
+                const was = open.slots.includes(slot.id);
+                open.slots = was ? open.slots.filter(id => id !== slot.id) : open.slots.concat(slot.id);
+                uiState.open = open;
+                applyOpenState();
+                await saveUiState();
             });
             // Grabs one slot and applies it straight away: a per-slot grab is
             // for building a look one page at a time, and applied slots
@@ -3640,6 +3641,28 @@
 
         async function saveUiState() { await store.set(UI_KEY, JSON.stringify(uiState)); }
 
+        // Which slot rows are expanded, and whether Advanced is. Part of the
+        // panel's UI state, so it survives reloads and follows other tabs.
+        // Older saved states have no `open`: everything closed.
+        function openState() {
+            const open = uiState.open || {};
+            return {
+                slots: Array.isArray(open.slots) ? open.slots.filter(id => SLOT_BY_ID[id]) : [],
+                advanced: !!open.advanced,
+            };
+        }
+
+        function applyOpenState() {
+            const open = openState();
+            for (const slot of SLOTS) {
+                const isOpen = open.slots.includes(slot.id);
+                panel.querySelector(`[data-slotbody="${slot.id}"]`).style.display = isOpen ? '' : 'none';
+                panel.querySelector(`[data-slotcaret="${slot.id}"]`).innerHTML = isOpen ? '&#9662;' : '&#9656;';
+            }
+            advancedBox.style.display = open.advanced ? '' : 'none';
+            advancedToggle.innerHTML = 'Advanced ' + (open.advanced ? '&#9662;' : '&#9656;');
+        }
+
         function applyCollapsed() {
             panelBody.style.display = uiState.collapsed ? 'none' : '';
             panel.classList.toggle('pp-collapsed', !!uiState.collapsed);
@@ -3710,11 +3733,13 @@
             await saveUiState();
         });
 
-        advancedToggle.addEventListener('click', () => {
+        advancedToggle.addEventListener('click', async () => {
             disarmNuke();
-            const open = advancedBox.style.display !== 'none';
-            advancedBox.style.display = open ? 'none' : '';
-            advancedToggle.innerHTML = 'Advanced ' + (open ? '&#9656;' : '&#9662;');
+            const open = openState();
+            open.advanced = !open.advanced;
+            uiState.open = open;
+            applyOpenState();
+            await saveUiState();
         });
 
         // ---------------- undo ----------------
@@ -4481,7 +4506,8 @@
             await store.set(KEYS_KEY, '1');
             await setApplyEverywhere(false, true);
 
-            uiState = { left: null, top: null, collapsed: false };
+            // What's expanded stays: Reset is pressed from inside Advanced.
+            uiState = { left: null, top: null, collapsed: false, open: uiState.open };
             panel.style.left = 'auto';
             panel.style.right = '10px';
             panel.style.top = '10px';
@@ -4649,6 +4675,7 @@
             panel.style.right = '10px';
             panel.style.top = '10px';
             applyCollapsed();
+            applyOpenState();
             await saveUiState();
 
             renderPresets();
@@ -4708,7 +4735,21 @@
         }
         applyPosition();
         applyCollapsed();
+        applyOpenState();
         window.addEventListener('resize', applyPosition);
+
+        // Another tab expanded a row, collapsed the panel or moved it: follow.
+        store.subscribe(UI_KEY, (raw) => {
+            try {
+                uiState = Object.assign({ left: null, top: null, collapsed: false }, JSON.parse(raw || '{}') || {});
+            } catch (e) {
+                console.warn('[previewer] could not parse panel state from another tab', e);
+                return;
+            }
+            placePanel();
+            applyCollapsed();
+            applyOpenState();
+        });
 
         applyEverywhere = (await store.get(EVERYWHERE_KEY, '0')) === '1';
         everywhereInput.checked = applyEverywhere;
