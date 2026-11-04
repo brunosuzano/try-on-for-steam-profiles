@@ -1597,10 +1597,48 @@
     let statusEl = null;
 
     function setStatus(message, isError) {
-        console.log('[previewer]', message);
+        if (message) console.log('[previewer]', message);
+        clearTimeout(statusFadeTimer);
+        clearTimeout(statusSwapTimer);
         if (!statusEl) return;
-        statusEl.textContent = message;
-        statusEl.classList.toggle('pp-error', !!isError);
+        showStatusText(message || standingNote(), !!isError);
+        // Results fade: the page shows what happened, and a stale line reads
+        // as if it were still news. Errors stay until the next message, so a
+        // failure is still explained after a glance away (fail loudly).
+        if (!message || isError) return;
+        const shownFor = Math.min(8000, 3000 + message.length * 40);
+        statusFadeTimer = setTimeout(() => {
+            statusEl.classList.add('pp-fading');
+            statusSwapTimer = setTimeout(() => showStatusText(standingNote(), false), 600);
+        }, shownFor);
+    }
+
+    // Standing notes describe a state that's still true and that nothing
+    // else on screen explains, like "press O to go back" while the page's
+    // own look is showing. They stay up for as long as the state lasts, and
+    // a fading result falls back to them rather than to an empty line.
+    // First non-empty one wins.
+    const standingNotes = { peek: '', mode: '' };
+    let statusFadeTimer = null;
+    let statusSwapTimer = null;
+
+    function standingNote() {
+        return standingNotes.peek || standingNotes.mode;
+    }
+
+    function showStatusText(text, isError) {
+        statusEl.classList.remove('pp-fading');
+        statusEl.textContent = text;
+        statusEl.classList.toggle('pp-error', isError);
+    }
+
+    // Sets or clears a standing note. It shows straight away, replacing
+    // whatever result was on screen.
+    function setStandingNote(key, text) {
+        if (standingNotes[key] === (text || '')) return;
+        standingNotes[key] = text || '';
+        if (text) console.log('[previewer]', text);
+        setStatus('', false);
     }
 
     // ---------------- whose profile is this ----------------
@@ -1837,7 +1875,7 @@
         peekLatched = false;
         if (onPeekChange) onPeekChange();
         // Take down "press O to go back" once it no longer applies.
-        if (wasLatched) setStatus('', false);
+        if (wasLatched) setStandingNote('peek', '');
     }
 
     // What releasing P or the Peek button does: a held peek ends, a latched
@@ -1857,7 +1895,9 @@
         if (!peeking) return;
         peekLatched = true;
         if (onPeekChange) onPeekChange();
-        setStatus('Showing this page\u2019s own look \u2014 press O to go back.', false);
+        // The one message that stays: the try-on just vanished, maybe from
+        // a stray key press, and nothing else says how to get it back.
+        setStandingNote('peek', 'Showing this page\u2019s own look \u2014 press O to go back.');
     }
 
     function allStillApplied() {
@@ -2700,6 +2740,7 @@
                 '#ppStatus { flex: 1; min-width: 0; min-height: 14px; font-size: 11px; color: #9fd3a4;' +
                     ' word-break: break-word; }',
                 '#ppStatus.pp-error { color: #ff8a8a; }',
+                '#ppStatus.pp-fading { opacity: 0; transition: opacity 0.6s; }',
                 '#ppAdvToggle { flex: none; font-size: 11px; color: #9aa9b6; cursor: pointer; user-select: none; }',
                 '#ppAdvToggle:hover { color: #dfe8ef; }',
                 '#ppAdvanced { margin-top: 8px; padding: 10px; }',
@@ -3729,6 +3770,7 @@
                 $('#ppApply').title = 'Apply every slot that has URL(s) filled in';
                 $('#ppClear').title = 'Remove everything you\u2019ve applied and put the page back';
                 setPeekAvailable(true, 'Hold to see this page\u2019s own look (or hold P). Press O to toggle it and stay.');
+                setStandingNote('mode', '');
                 return;
             }
             const preview = onSteamPreview();
@@ -3738,7 +3780,8 @@
             setPeekAvailable(false, preview
                 ? 'Nothing is applied over Steam\u2019s own preview'
                 : 'Nothing is applied on someone else\u2019s profile');
-            setStatus(preview ? 'Steam preview: grab only.' : 'Not your profile: grab only.', false);
+            // Stays: otherwise Apply sending to other tabs is a mystery.
+            setStandingNote('mode', preview ? 'Steam preview: grab only.' : 'Not your profile: grab only.');
         }
 
         // Applies the shared applied set when this page allows that. The
@@ -4619,7 +4662,8 @@
                 nukeBtn.textContent = 'Click again to erase ' + blastRadius();
                 nukeBtn.classList.add('pp-armed');
                 setStatus('Export first if you want a copy \u2014 this clears presets and settings.', true);
-                nukeTimer = setTimeout(disarmNuke, 3000);
+                // The warning is red so it stays up; take it down with the arming.
+                nukeTimer = setTimeout(() => { disarmNuke(); setStatus('', false); }, 3000);
                 return;
             }
             disarmNuke();
