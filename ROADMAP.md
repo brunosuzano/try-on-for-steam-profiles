@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **1.56** (userscript, five slots, feature-complete for
+Current version: **1.57** (userscript, five slots, feature-complete for
 Tampermonkey).
 
 ---
@@ -108,8 +108,12 @@ storage shim.
 - [x] Toolbar icon toggles the panel. **Keep the in-page panel** — a popup
       closes the moment you click the page, which destroys the
       flick-between-presets workflow this is built around.
-- [ ] "Report broken" button: prefilled GitHub issue carrying the page URL,
-      which detection strategy matched, and the diagnostics payload. This is
+- [x] "Report a problem" button (Advanced): opens GitHub's new-issue form
+      prefilled with version, browser, page kind, which detection strategy
+      matched per slot, what's applied, and the profile or Points Shop
+      diagnostics, with profile links, SteamIDs, login, display name and
+      uploaded avatars scrubbed. Too long for the link: the diagnostics go to
+      the clipboard. Nothing is sent; the user submits it or doesn't. This is
       the no-telemetry substitute for knowing when Steam changes their markup.
 - [ ] Firefox variant: namespace shim + manifest tweak, same file.
 
@@ -130,8 +134,9 @@ Safari is out of scope — needs a Mac, Xcode, and $99/year.
       `store.steampowered.com`) to read item details from the pages being
       previewed; the mini profile lookup carries the user's own Steam
       cookies, exactly as Steam's own page would. Nothing is sent anywhere
-      else. Stays six lines as long as the no-telemetry rule in CLAUDE.md
-      holds.
+      else. "Report a problem" only opens a prefilled GitHub issue in a new
+      tab, which the user reads and chooses to submit; worth one sentence.
+      Stays short as long as the no-telemetry rule in CLAUDE.md holds.
 - [ ] Listing assets: 128px icon, 1280×800 screenshots, description,
       single-purpose statement, per-permission justifications
 - [ ] Submit: Chrome ($5 one-time, covers all future extensions), AMO (free),

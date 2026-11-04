@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Try-On for Steam Profiles
 // @namespace    https://github.com/brunosuzano/try-on-for-steam-profiles
-// @version      1.56
+// @version      1.57
 // @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
 // @author       Bruno Moreira
 // @license      MIT
@@ -37,7 +37,7 @@
     // identically to 9.11, the abstraction fits.
     // =================================================================
 
-    const SCRIPT_VERSION = '1.56';
+    const SCRIPT_VERSION = '1.57';
     const STATE_KEY = 'ppApplied';
     const PRESETS_KEY = 'ppPresets';
     const AUTO_KEY = 'ppAuto';
@@ -461,15 +461,21 @@
         return narrower ? cleanTile({ size: cs.backgroundSize }) : null;
     }
 
+    // The last strategy each slot matched, or 'none': the first thing to read
+    // in a "Report a problem" issue when Steam renames something.
+    const strategyHits = {};
+
     function findByStrategies(strategies, slotId) {
         for (const strategy of strategies) {
             let el = null;
             try { el = strategy.find(); } catch (e) { /* try the next one */ }
             if (el) {
                 console.log('[previewer] ' + slotId + ' found via:', strategy.name);
+                strategyHits[slotId] = strategy.name;
                 return el;
             }
         }
+        strategyHits[slotId] = 'none';
         // A log, not a warning: a profile with no frame or no background is
         // normal, and Chrome lists every content-script warning on the
         // extension's Errors page, where it reads as a fault.
@@ -2910,6 +2916,8 @@
                         title="Restore default settings. Saved presets are kept.">Reset settings to defaults</button>
                     <button id="ppDiag" class="pp-btn pp-btn-small" style="width:100%; margin-top:6px;"
                         title="Copy measurements of this page's own look, for debugging">Copy sizing diagnostics</button>
+                    <button id="ppReport" class="pp-btn pp-btn-small" style="width:100%; margin-top:6px;"
+                        title="Opens a GitHub issue filled in with what the panel sees here, personal details removed. Nothing is sent until you submit it.">Report a problem</button>
                     <div style="margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.06);">
                         <button id="ppNuke" class="pp-btn pp-btn-small" style="width:100%;"
                             title="Erases presets, settings, panel position and everything applied. A backup is kept so it can be undone.">Erase everything</button>
@@ -2963,7 +2971,9 @@
         const advancedBox = $('#ppAdvanced');
         const advancedToggle = $('#ppAdvToggle');
 
-        function storeDiagnostics() {
+        // forReport leaves out the dialog's text, which can include the
+        // viewer's name and Points balance.
+        function storeDiagnostics(forReport) {
             const modal = storeModal();
             const preview = storePreviewValue();
             const lines = [
@@ -2992,7 +3002,8 @@
                         .map(entry => entry.slot);
                     lines.push('  level ' + depth + ' <' + node.tagName.toLowerCase() + '.' +
                         (node.className || '').toString().split(' ')[0] + '>' +
-                        ' matches[' + (hits.join(',') || '-') + ']: ' + (text || '(no text)'));
+                        ' matches[' + (hits.join(',') || '-') + ']' +
+                        (forReport ? '' : ': ' + (text || '(no text)')));
                     node = node.parentElement;
                 }
             }
@@ -4576,7 +4587,9 @@
             setStatus('Settings reset to defaults.', false);
         });
 
-        $('#ppDiag').addEventListener('click', async () => {
+        // compact: one line, for the issue link, where every indent costs
+        // three characters once URL-encoded.
+        function profileDiagnostics(compact) {
             const report = {
                 url: location.href,
                 viewport: { w: window.innerWidth, h: window.innerHeight },
@@ -4623,7 +4636,133 @@
                 }
                 report.slots[slot.id] = entry;
             }
-            const text = JSON.stringify(report, null, 2);
+            return compact ? JSON.stringify(report) : JSON.stringify(report, null, 2);
+        }
+
+        // ---------------- report a problem ----------------
+        //
+        // The no-telemetry substitute for knowing when Steam changes its
+        // markup. Nothing is sent: it opens GitHub's new-issue form with the
+        // details filled in, and the user reads, edits and submits it (or
+        // doesn't). Personal details are scrubbed before they reach the form.
+
+        const ISSUES_URL = 'https://github.com/brunosuzano/try-on-for-steam-profiles/issues/new';
+        // GitHub refuses a new-issue link much past 8 KB; leave headroom.
+        const MAX_ISSUE_URL = 7000;
+
+        function scrubPersonal(text) {
+            let out = String(text)
+                .replace(/(steamcommunity\.com\/)(id|profiles)\/[^\/?#\s"'<>]+/gi, '$1$2/[profile]')
+                .replace(/\b7656119\d{10}\b/g, '[steamid]')
+                // Uploaded avatars identify the person; shop avatars live
+                // under /items/ and are just catalogue items.
+                .replace(/https?:\/\/avatars\.[a-z.]*steamstatic\.com\/[^\s"'<>)]+/gi, '[uploaded avatar]')
+                .replace(/https?:\/\/[^\s"'<>)]*\/images\/avatars\/[^\s"'<>)]+/gi, '[uploaded avatar]');
+            // Safety net: any exact copy of the viewer's or owner's identifiers.
+            const viewer = viewerInfo();
+            const owner = /\bpersonaname"\s*:\s*"([^"]{2,64})"/.exec(inlineScriptText());
+            const known = [
+                [viewer.account_name, '[login]'], [viewer.steamid, '[steamid]'],
+                [viewer.accountid, '[accountid]'], [owner && owner[1], '[name]'],
+            ];
+            for (const [value, label] of known) {
+                if (value && String(value).length >= 3) out = out.split(String(value)).join(label);
+            }
+            return out;
+        }
+
+        function pageKind() {
+            if (ON_STORE) return 'Points Shop';
+            if (onSteamPreview()) return 'Steam item preview';
+            if (ownership.owns === true) return 'own profile';
+            if (ownership.owns === false) return 'someone else\u2019s profile';
+            return 'profile (ownership undecided)';
+        }
+
+        function runningAs() {
+            if (typeof GM_info !== 'undefined' && GM_info) {
+                return 'userscript (' + ((GM_info.scriptHandler || 'userscript manager') + ' ' +
+                    (GM_info.version || '')).trim() + ')';
+            }
+            return HAS_EXTENSION_RUNTIME ? 'browser extension' : 'unknown';
+        }
+
+        function browserName() {
+            const brands = (navigator.userAgentData && navigator.userAgentData.brands) || [];
+            const real = brands.find(b => !/not.?a.?brand|chromium/i.test(b.brand)) ||
+                brands.find(b => /chromium/i.test(b.brand));
+            if (real) return real.brand + ' ' + real.version;
+            const m = /(Firefox|Edg|OPR|Chrome|Safari)\/(\d+)/.exec(navigator.userAgent);
+            return m ? m[1].replace('Edg', 'Edge').replace('OPR', 'Opera') + ' ' + m[2] : 'unknown';
+        }
+
+        function issueUrl(title, body) {
+            return ISSUES_URL + '?title=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(body);
+        }
+
+        $('#ppReport').addEventListener('click', async () => {
+            const applied = activeSet();
+            const detection = ON_STORE
+                ? 'store preview detected as: ' + ((storePreviewValue() || {}).slotId || 'nothing')
+                : SLOTS.map(s => s.label + ': ' + (strategyHits[s.id] || 'not checked')).join('; ');
+            const details = [
+                '- Version: ' + SCRIPT_VERSION + ', running as ' + runningAs(),
+                '- Browser: ' + browserName(),
+                // The whole URL is scrubbed, then cut to the path: the
+                // profile pattern needs the host in front of /id/.
+                '- Page: ' + pageKind() + ', `' + scrubPersonal(location.origin + location.pathname)
+                    .slice(location.origin.length) + '`',
+                '- Detection: ' + detection,
+                '- Applied: ' + (Object.keys(applied).map(id =>
+                    SLOT_BY_ID[id].label + ' (' + applied[id].kind + ')').join(', ') || 'nothing'),
+            ].join('\n');
+            const diagnostics = scrubPersonal(ON_STORE ? storeDiagnostics(true) : profileDiagnostics(true));
+
+            const intro = '**What went wrong?**\n' +
+                '<!-- What you did, what you expected, and what happened instead. A screenshot helps. -->\n\n\n' +
+                '**Details** (filled in by the panel, personal details removed: check and edit anything)\n\n' +
+                details + '\n\n';
+            const fenced = '<details><summary>Diagnostics</summary>\n\n```\n' + diagnostics + '\n```\n</details>\n';
+            const title = 'Problem on ' + pageKind() + ' (' + SCRIPT_VERSION + ')';
+
+            // Three outcomes: everything fits in the link; it doesn't, and the
+            // diagnostics go to the clipboard; or the clipboard is blocked
+            // too, and they're shown below the panel to copy by hand.
+            let url = issueUrl(title, intro + fenced);
+            let leftOver = '';    // diagnostics that didn't make it into the form
+            let copied = false;
+            if (url.length > MAX_ISSUE_URL) {
+                // Copied before opening, while this page still has focus.
+                try { await writeClipboard(diagnostics); copied = true; } catch (e) { copied = false; }
+                if (!copied) leftOver = diagnostics;
+                url = issueUrl(title, intro + '<details><summary>Diagnostics</summary>\n\n```\n' +
+                    'Too long for the link. Paste them over this line.\n```\n</details>\n');
+            }
+
+            // Not 'noopener': with it, window.open returns null even when the
+            // tab opens, so a blocked popup couldn't be told apart. Cutting
+            // the opener link by hand does the same job.
+            const win = window.open(url, '_blank');
+            if (win) {
+                try { win.opener = null; } catch (e) {}
+            } else {
+                showTextFallback('The browser blocked the new tab. Open this link to report the problem:',
+                    url + (leftOver ? '\n\nThen paste these diagnostics into the issue:\n\n' + leftOver : ''));
+                setStatus('Couldn\u2019t open GitHub: the browser blocked the new tab. The link is below.', true);
+                return;
+            }
+            if (leftOver) {
+                showTextFallback('The diagnostics didn\u2019t fit in the link. Copy them into the issue:', leftOver);
+                setStatus('Opened a GitHub issue to fill in. Copy the diagnostics below into it.', true);
+                return;
+            }
+            setStatus(copied
+                ? 'Opened a GitHub issue to fill in. The diagnostics are on your clipboard: paste them in.'
+                : 'Opened a GitHub issue to fill in. Nothing is sent until you submit it there.', false);
+        });
+
+        $('#ppDiag').addEventListener('click', async () => {
+            const text = profileDiagnostics();
             console.log('[previewer] diagnostics\n' + text);
             try {
                 await writeClipboard(text);
