@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Try-On for Steam Profiles
 // @namespace    https://github.com/brunosuzano/try-on-for-steam-profiles
-// @version      1.52
+// @version      1.53
 // @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
 // @author       Bruno Moreira
 // @license      MIT
@@ -37,7 +37,7 @@
     // identically to 9.11, the abstraction fits.
     // =================================================================
 
-    const SCRIPT_VERSION = '1.52';
+    const SCRIPT_VERSION = '1.53';
     const STATE_KEY = 'ppApplied';
     const PRESETS_KEY = 'ppPresets';
     const AUTO_KEY = 'ppAuto';
@@ -2615,6 +2615,14 @@
                 // to expand the slot row, or apply the preset.
                 '#pp-panel [data-slotclear]:hover, #pp-panel [data-presetdel]:hover' +
                     ' { color: #ff6b6b !important; background: #22394d !important; }',
+                // Collapsed, the panel is just its title bar: shrink it to the
+                // title and fade it until hovered, so it stays out of the way
+                // of the look you're trying on. !important beats the inline
+                // width and padding the expanded panel uses.
+                '#pp-panel.pp-collapsed { width: auto !important; padding: 4px 8px !important;' +
+                    ' opacity: 0.5; transition: opacity 0.15s; }',
+                '#pp-panel.pp-collapsed:hover { opacity: 1; }',
+                '#pp-panel.pp-collapsed #ppHeader { margin-bottom: 0 !important; }',
             ].join('\n');
             (document.head || document.documentElement).appendChild(style);
         }
@@ -3520,6 +3528,7 @@
 
         function applyCollapsed() {
             panelBody.style.display = uiState.collapsed ? 'none' : '';
+            panel.classList.toggle('pp-collapsed', !!uiState.collapsed);
             collapseBtn.innerHTML = uiState.collapsed ? '&#9656;' : '&#9662;';
             collapseBtn.title = uiState.collapsed ? 'Expand' : 'Collapse';
         }

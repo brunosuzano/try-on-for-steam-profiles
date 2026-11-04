@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **1.52** (userscript, five slots, feature-complete for
+Current version: **1.53** (userscript, five slots, feature-complete for
 Tampermonkey).
 
 ---
