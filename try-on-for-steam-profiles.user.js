@@ -3402,6 +3402,7 @@
         };
 
         document.addEventListener('keydown', (e) => {
+            if (panelHidden) return;
             if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
             if (isTypingTarget(e.target)) return;
             if (e.key === 'p' || e.key === 'P') peekStart();
@@ -3498,6 +3499,7 @@
             // is open — but keys still reach the document, and pressing one
             // isn't a click outside the preview, so it shouldn't dismiss it.
             document.addEventListener('keydown', (e) => {
+                if (panelHidden) return;
                 if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
                 if (isTypingTarget(e.target)) return;
                 if (e.key === 'g' || e.key === 'G') {
@@ -3708,7 +3710,7 @@
         });
 
         document.addEventListener('keydown', (e) => {
-            if (!numberKeys) return;
+            if (!numberKeys || panelHidden) return;
             if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
             if (isTypingTarget(e.target)) return;
             if (e.key < '1' || e.key > '9') return;
@@ -4627,11 +4629,13 @@
         store.subscribe(EVERYWHERE_KEY, (raw) => { setApplyEverywhere(raw === '1', false); });
         store.subscribe(DRAFT_KEY, showDraft);
 
-        // Hidden is only out of sight: the try-on stays painted, and the
-        // keys (presets, P/O peek, G on the shop) keep working, so you can
-        // flick between looks with nothing in the way. Shared by every tab.
+        // Hidden turns the panel and its keys off (the button says "off"),
+        // but leaves the try-on painted, as closing a tab would: Clear is
+        // what removes it. A peek in progress ends, or a latched one would
+        // be stuck with no key left to undo it. Shared by every tab.
         function applyHidden() {
             panel.style.display = panelHidden ? 'none' : '';
+            if (panelHidden && peeking) peekEnd();
             reportPanelHidden(panelHidden);
         }
         onToolbarClick(async () => {
