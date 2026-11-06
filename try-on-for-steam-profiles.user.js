@@ -4718,9 +4718,16 @@
             ].join('\n');
             const diagnostics = scrubPersonal(ON_STORE ? storeDiagnostics(true) : profileDiagnostics(true));
 
-            const intro = '**What went wrong?**\n' +
-                '<!-- What you did, what you expected, and what happened instead. A screenshot helps. -->\n\n\n' +
-                '**Details** (filled in by the panel, personal details removed: check and edit anything)\n\n' +
+            // The user's part comes first and looks like a form field: a
+            // heading, a line to write over, and room below. An HTML comment
+            // used to carry the prompt, but GitHub hides those in Preview.
+            const intro = '## What went wrong?\n\n' +
+                '**Write here, replacing this line:** what you did, what you expected, and what happened' +
+                ' instead. Screenshots help: drag them into this box.\n\n\n\n\n' +
+                '---\n\n' +
+                '## Details\n\n' +
+                '_Filled in by the Try-On panel, with personal details removed. Nothing to write below;' +
+                ' check it and edit anything you\u2019d rather not share._\n\n' +
                 details + '\n\n';
             const fenced = '<details><summary>Diagnostics</summary>\n\n```\n' + diagnostics + '\n```\n</details>\n';
             const title = 'Problem on ' + pageKind() + ' (' + SCRIPT_VERSION + ')';
