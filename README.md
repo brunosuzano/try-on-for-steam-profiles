@@ -72,8 +72,11 @@ Under **Advanced** you can **Export** your presets to a `.json` file and
 ## Privacy
 
 No analytics, no tracking, no servers. Your presets and settings are stored
-locally by Tampermonkey. The only requests the script makes are to Steam
-itself, to read item details from the pages you're previewing.
+locally in your browser (by Tampermonkey, or by the extension). The only
+requests the script makes are to Steam itself, to read item details from the
+pages you're previewing. **Advanced → Report a problem** opens a prefilled
+GitHub issue that you review and submit yourself; nothing is sent otherwise.
+Full details: [PRIVACY.md](PRIVACY.md).
 
 ## Not affiliated with Valve
 

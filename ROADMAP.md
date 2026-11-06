@@ -129,17 +129,16 @@ Safari is out of scope — needs a Mac, Xcode, and $99/year.
 - [x] **Make the repo public.** `@downloadURL`/`@updateURL` point at the raw
       file on `main`, so installs now update themselves: pushing a higher
       `@version` to `main` is a release.
-- [ ] Privacy policy on GitHub Pages. Six lines: collects nothing, no
-      analytics, no servers, presets and URLs stored locally. Network
-      requests go to Steam only (`steamcommunity.com`,
-      `store.steampowered.com`) to read item details from the pages being
-      previewed; the mini profile lookup carries the user's own Steam
-      cookies, exactly as Steam's own page would. Nothing is sent anywhere
-      else. "Report a problem" only opens a prefilled GitHub issue in a new
-      tab, which the user reads and chooses to submit; worth one sentence.
-      Stays short as long as the no-telemetry rule in CLAUDE.md holds.
-- [ ] Listing assets: 128px icon, 1280×800 screenshots, description,
-      single-purpose statement, per-permission justifications
+- [x] Privacy policy: `PRIVACY.md`, linked from the README. Its GitHub page
+      is the URL the stores get, so no Pages site is needed. Collects
+      nothing; storage stays local; requests go to Steam only, with the
+      user's own cookies, as Steam's pages do; "Report a problem" only opens
+      a prefilled issue the user chooses to submit. Stays this short as long
+      as the no-telemetry rule in CLAUDE.md holds.
+- [ ] Listing assets: text done in `docs/store-listing.md` (summary,
+      description, single purpose, permission justifications, data usage,
+      privacy URL, screenshot shot list). Still to do: the 1280×800
+      screenshots.
 - [ ] Submit: Chrome ($5 one-time, covers all future extensions), AMO (free),
       Edge (free)
 - [ ] Optionally Greasy Fork for the userscript itself. Free, no review queue,
