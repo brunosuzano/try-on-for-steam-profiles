@@ -1,6 +1,6 @@
 # Roadmap
 
-Current version: **1.57** (userscript, five slots, feature-complete for
+Current version: **1.58** (userscript, five slots, feature-complete for
 Tampermonkey).
 
 ---
@@ -99,9 +99,10 @@ storage shim.
       doesn't react to its own writes (`onChanged` has no "remote" flag)
 - [x] Cross-origin requests through `background.js`: content scripts are
       bound by the page's CORS, which `GM_xmlhttpRequest` never was
-- [ ] Load unpacked in Chrome and run the regression list above, plus:
+- [x] Load unpacked in Chrome and run the regression list above, plus:
       cross-tab sync with no repaint on the writing tab, bundle grab and
-      game names through the service worker, Export/Import, clipboard
+      game names through the service worker, Export/Import, clipboard.
+      Done November 2026 on the packed zip (1.55–1.57), Errors page clean.
 - [x] Pack script: `tools/pack-extension.ps1` zips `manifest.json` and
       exactly the files it references into `dist/`, and refuses if the
       three version strings disagree, a file is missing, or the tree is dirty

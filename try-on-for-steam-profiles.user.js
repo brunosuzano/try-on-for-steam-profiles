@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Try-On for Steam Profiles
 // @namespace    https://github.com/brunosuzano/try-on-for-steam-profiles
-// @version      1.57
+// @version      1.58
 // @description  Preview Steam profile backgrounds, avatars, avatar frames, mini profiles and themes before you buy or equip them
 // @author       Bruno Moreira
 // @license      MIT
@@ -37,7 +37,7 @@
     // identically to 9.11, the abstraction fits.
     // =================================================================
 
-    const SCRIPT_VERSION = '1.57';
+    const SCRIPT_VERSION = '1.58';
     const STATE_KEY = 'ppApplied';
     const PRESETS_KEY = 'ppPresets';
     const AUTO_KEY = 'ppAuto';
@@ -4594,8 +4594,7 @@
                 url: location.href,
                 viewport: { w: window.innerWidth, h: window.innerHeight },
                 bodyClass: document.body.className,
-                themeSnapshot: (pageSnapshot.theme && pageSnapshot.theme.value) || null,
-                snapshot: pageSnapshot,
+                snapshot: pageSnapshot,    // the theme is in here too
                 applied: activeSet(),
                 ownProfile: ownership.owns,
                 ownProfileVia: ownership.via || '(undecided)',
@@ -4696,6 +4695,15 @@
             return m ? m[1].replace('Edg', 'Edge').replace('OPR', 'Opera') + ' ' + m[2] : 'unknown';
         }
 
+        // Slots found through strategies report which one matched. The theme
+        // (read off <body>) and the mini profile (fetched on Grab) have none,
+        // so they report what the page snapshot holds instead.
+        function detectionOf(slot) {
+            if (strategyHits[slot.id]) return strategyHits[slot.id];
+            if (pageSnapshot[slot.id] && pageSnapshot[slot.id].value) return 'found';
+            return slot.volatile ? 'loads on Grab' : 'nothing found';
+        }
+
         function issueUrl(title, body) {
             return ISSUES_URL + '?title=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(body);
         }
@@ -4704,7 +4712,7 @@
             const applied = activeSet();
             const detection = ON_STORE
                 ? 'store preview detected as: ' + ((storePreviewValue() || {}).slotId || 'nothing')
-                : SLOTS.map(s => s.label + ': ' + (strategyHits[s.id] || 'not checked')).join('; ');
+                : SLOTS.map(s => s.label + ': ' + detectionOf(s)).join('; ');
             const details = [
                 '- Version: ' + SCRIPT_VERSION + ', running as ' + runningAs(),
                 '- Browser: ' + browserName(),
