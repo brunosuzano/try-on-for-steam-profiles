@@ -4723,7 +4723,7 @@
             // used to carry the prompt, but GitHub hides those in Preview.
             const intro = '## What went wrong?\n\n' +
                 '**Write here, replacing this line:** what you did, what you expected, and what happened' +
-                ' instead. Screenshots help: drag them into this box.\n\n\n\n\n' +
+                ' instead. Screenshots help: drag them into this box.' + '\n'.repeat(12) +
                 '---\n\n' +
                 '## Details\n\n' +
                 '_Filled in by the Try-On panel, with personal details removed. Nothing to write below;' +
